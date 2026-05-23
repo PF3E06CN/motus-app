@@ -285,6 +285,8 @@ const safariVerifySlotFlip = { correct: 0, wrong: 0, missing: 0 };
 let safariVerifyWarmed = false;
 /** @type {Promise<void> | null} */
 let safariVerifyWarmInFlight = null;
+/** @type {Map<string, string>} blob: URLs (MP3 entiers en RAM, pas de streaming HTTPS) */
+const safariVerifyBlobByRole = new Map();
 /** @type {AudioBufferSourceNode | null} */
 let activeSafariVerifySource = null;
 
@@ -346,12 +348,34 @@ function getCtx() {
     if (!ctxCache) {
       const Ctx = window.AudioContext || window.webkitAudioContext;
       if (!Ctx) return null;
-      ctxCache = new Ctx();
+      ctxCache = new Ctx({ latencyHint: 'playback' });
     }
     return ctxCache;
   } catch {
     return null;
   }
+}
+
+function pauseBackgroundMediaForVerify() {
+  const gen = document.getElementById('motus-snd-generique');
+  if (gen instanceof HTMLAudioElement && !gen.paused) {
+    try {
+      gen.pause();
+    } catch {
+      /* ignore */
+    }
+  }
+}
+
+function revokeSafariVerifyBlobs() {
+  for (const url of safariVerifyBlobByRole.values()) {
+    try {
+      URL.revokeObjectURL(url);
+    } catch {
+      /* ignore */
+    }
+  }
+  safariVerifyBlobByRole.clear();
 }
 
 async function ensureRunning(ctx) {
@@ -592,42 +616,60 @@ export async function primeAudioContext() {
   }
 }
 
-async function warmSafariVerifySlotElement(el, href) {
-  configureSafariVerifyElement(el);
-  el.muted = true;
-  const prev = el.getAttribute('data-motus-verify-href');
-  if (prev !== href) {
-    el.setAttribute('data-motus-verify-href', href);
-    el.src = href;
-    try {
-      el.load();
-    } catch {
-      return;
-    }
-  }
-  await waitMediaCanPlayThrough(el, 12000).catch(() => false);
-  el.muted = true;
-}
+/**
+ * Télécharge chaque MP3 une fois → blob URL + décode Web Audio + précharge des 2 slots HTML.
+ * @param {'correct'|'wrong'|'missing'} role
+ */
+async function loadSafariVerifyAsset(role) {
+  if (safariVerifyBlobByRole.has(role)) return safariVerifyBlobByRole.get(role);
 
-async function warmVerifyAudioBody() {
-  unlockAudioSync();
-  const tasks = [];
+  const href = hrefForVerifyRole(role);
+  if (!href) return null;
+
+  const res = await fetch(href, { mode: 'cors', cache: 'force-cache' });
+  if (!res.ok) return null;
+  const ab = await res.arrayBuffer();
+  if (!ab.byteLength) return null;
+
+  const blobUrl = URL.createObjectURL(new Blob([ab], { type: 'audio/mpeg' }));
+  safariVerifyBlobByRole.set(role, blobUrl);
+
   const ctx = getCtx();
   if (ctx) {
     await ensureRunning(ctx);
-    for (const role of VERIFY_SAMPLE_ROLES) {
-      tasks.push(loadBufferForRole(ctx, role));
+    try {
+      const copy = ab.slice(0);
+      const buf = await ctx.decodeAudioData(copy);
+      if (isUsableDecodedBuffer(buf)) roleBuffers.set(role, buf);
+    } catch {
+      /* ignore */
     }
   }
-  for (const role of VERIFY_SAMPLE_ROLES) {
-    const href = hrefForVerifyRole(role);
-    if (!href) continue;
-    const pair = ensureSafariVerifySlots(role);
-    for (const el of pair) {
-      tasks.push(warmSafariVerifySlotElement(el, href));
+
+  const pair = ensureSafariVerifySlots(role);
+  for (const el of pair) {
+    configureSafariVerifyElement(el);
+    el.muted = true;
+    el.src = blobUrl;
+    el.setAttribute('data-motus-verify-blob', blobUrl);
+    try {
+      el.load();
+    } catch {
+      /* ignore */
     }
+    await waitMediaCanPlayThrough(el, 12000).catch(() => false);
+    el.muted = true;
   }
-  await Promise.all(tasks);
+
+  return blobUrl;
+}
+
+async function warmVerifyAudioBody() {
+  pauseBackgroundMediaForVerify();
+  unlockAudioSync();
+  const ctx = getCtx();
+  if (ctx) await ensureRunning(ctx);
+  await Promise.all([...VERIFY_SAMPLE_ROLES].map((role) => loadSafariVerifyAsset(role)));
   safariVerifyWarmed = true;
 }
 
@@ -904,26 +946,96 @@ async function playSafariVerifyOnElement(el, href) {
   return reason === 'ended';
 }
 
+async function playSafariVerifyBlobOnElement(el, blobUrl) {
+  if (!el || !blobUrl) return false;
+  configureSafariVerifyElement(el);
+  stopActiveSafariVerifyWebSource();
+
+  const slotKey = el.getAttribute('data-motus-safari-verify-slot');
+  const roleKey = slotKey?.replace(/-\d+$/, '');
+  if (roleKey) {
+    const pair = safariVerifySlotsByRole.get(roleKey);
+    if (pair) {
+      for (const other of pair) {
+        if (other === el) continue;
+        try {
+          other.pause();
+          other.currentTime = 0;
+          other.muted = true;
+        } catch {
+          /* ignore */
+        }
+      }
+    }
+  }
+
+  try {
+    el.pause();
+  } catch {
+    /* ignore */
+  }
+
+  if (el.getAttribute('data-motus-verify-blob') !== blobUrl) {
+    el.setAttribute('data-motus-verify-blob', blobUrl);
+    el.src = blobUrl;
+    try {
+      el.load();
+    } catch {
+      return false;
+    }
+    const ready = await waitMediaCanPlayThrough(el, 8000);
+    if (!ready || el.error) return false;
+  } else if (el.readyState < HTMLMediaElement.HAVE_CURRENT_DATA || el.error) {
+    const ready = await waitMediaCanPlayThrough(el, 4000);
+    if (!ready || el.error) return false;
+  }
+
+  el.muted = false;
+  const cap = Math.min(
+    15000,
+    Number.isFinite(el.duration) && el.duration > 0 ? Math.ceil(el.duration * 1000) + 800 : 10000,
+  );
+  const reasonPromise = waitAudioEndReason(el, cap);
+  try {
+    el.currentTime = 0;
+    const p = el.play();
+    if (p !== undefined) await p.catch(() => {});
+  } catch {
+    el.muted = true;
+    return false;
+  }
+  if (el.error) {
+    el.muted = true;
+    return false;
+  }
+
+  const reason = await reasonPromise;
+  try {
+    el.pause();
+    el.currentTime = 0;
+  } catch {
+    /* ignore */
+  }
+  el.muted = true;
+  return reason === 'ended';
+}
+
 async function playSafariVerifyRole(role) {
   if (!isSafariBrowser()) return false;
   await warmVerifyAudio();
-  /* Safari macOS : buffers décodés en RAM (pas de streaming réseau lettre par lettre). */
-  if (!isIOSDevice()) {
-    const ctx = getCtx();
-    if (ctx) {
-      await ensureRunning(ctx);
-      const cached = roleBuffers.get(role);
-      if (isUsableDecodedBuffer(cached)) {
-        await playBufferOnce(ctx, cached);
-        return true;
-      }
-    }
-    if (await playRoleSampleWebAudio(role)) return true;
+  const blobUrl = safariVerifyBlobByRole.get(role);
+  if (blobUrl) {
+    const el = borrowSafariVerifyElement(role);
+    if (await playSafariVerifyBlobOnElement(el, blobUrl)) return true;
   }
-  const href = hrefForVerifyRole(role);
-  if (!href) return false;
-  const el = borrowSafariVerifyElement(role);
-  if (await playSafariVerifyOnElement(el, href)) return true;
+  const ctx = getCtx();
+  if (ctx) {
+    const cached = roleBuffers.get(role);
+    if (isUsableDecodedBuffer(cached)) {
+      await playBufferOnce(ctx, cached);
+      return true;
+    }
+  }
   return playRoleSampleWebAudio(role);
 }
 
@@ -943,6 +1055,7 @@ async function playRoleSampleWebAudio(role) {
 export function clearDecodedSoundCache() {
   roleBuffers.clear();
   castVoiceBuffers.clear();
+  revokeSafariVerifyBlobs();
   safariVerifyWarmed = false;
   safariVerifyWarmInFlight = null;
 }
@@ -1042,57 +1155,27 @@ export async function playVerifyLetterSound(outcome, opts = {}) {
   }
 }
 
-const VERIFY_SEQUENCE_GAP_SEC = 0.07;
-
 /**
- * Safari : une seule timeline Web Audio (buffers déjà en RAM) — évite stop/start + jank UI.
+ * Safari : lecture séquentielle via blob: (fichier entier en RAM), pas de Web Audio planifié.
  * @param {string[]} results
  * @param {{ isWin?: boolean, onLetter?: (index: number, outcome: string) => void }} [opts]
  */
-async function playSafariVerifySequenceScheduled(results, opts = {}) {
+async function playSafariVerifySequenceBlob(results, opts = {}) {
   const { onLetter } = opts;
   if (!results.length) return;
   await warmVerifyAudio();
-  const ctx = getCtx();
-  if (!ctx) return;
-  await ensureRunning(ctx);
+  pauseBackgroundMediaForVerify();
   stopActiveSafariVerifyWebSource();
-
-  let t = ctx.currentTime + 0.04;
-  let endT = t;
-  const cues = [];
 
   for (let i = 0; i < results.length; i++) {
     const outcome = results[i];
     if (outcome !== 'correct' && outcome !== 'wrong' && outcome !== 'missing') continue;
-    const buf = roleBuffers.get(outcome);
-    if (!isUsableDecodedBuffer(buf)) continue;
-
-    const startAt = t;
-    cues.push({ i, outcome, startAt, buf });
-
-    const src = ctx.createBufferSource();
-    const gain = ctx.createGain();
-    gain.gain.value = 1;
-    src.buffer = buf;
-    src.connect(gain);
-    gain.connect(ctx.destination);
-    src.start(startAt);
-
-    t += buf.duration + VERIFY_SEQUENCE_GAP_SEC;
-    endT = startAt + buf.duration;
+    const blobUrl = safariVerifyBlobByRole.get(outcome);
+    if (!blobUrl) continue;
+    if (onLetter) onLetter(i, outcome);
+    const el = borrowSafariVerifyElement(outcome);
+    await playSafariVerifyBlobOnElement(el, blobUrl);
   }
-
-  const base = ctx.currentTime;
-  for (const { i, outcome, startAt } of cues) {
-    if (onLetter) {
-      const ms = Math.max(0, (startAt - base) * 1000);
-      window.setTimeout(() => onLetter(i, outcome), ms);
-    }
-  }
-
-  const waitMs = Math.max(0, (endT - ctx.currentTime) * 1000) + 120;
-  await delay(waitMs);
 }
 
 /**
@@ -1106,7 +1189,7 @@ export async function playVerifySequence(results, opts = {}) {
   unlockAudioSync();
 
   if (isSafariBrowser()) {
-    await playSafariVerifySequenceScheduled(results, { isWin, onLetter });
+    await playSafariVerifySequenceBlob(results, { isWin, onLetter });
     return;
   }
 

@@ -1230,6 +1230,44 @@ function syncGameLayoutVars(game) {
   gridEl?.style.setProperty('--rows', String(game.maxAttempts));
 }
 
+/** Pendant la validation Safari : ne reconstruit pas toute la grille (évite le son hachuré). */
+function patchVerifyRevealRow(game) {
+  if (!gridEl || !game?.verifyAnimating) return false;
+  const ri = game.currentRow;
+  const row = game.rows[ri];
+  if (!row) return false;
+  const cols = game.length;
+  const needed = cols * game.maxAttempts;
+  if (gridEl.children.length < needed) return false;
+
+  if (attemptsLabel) {
+    attemptsLabel.textContent = `Essai ${Math.min(game.currentRow + 1, game.maxAttempts)} / ${game.maxAttempts}`;
+  }
+
+  for (let ci = 0; ci < cols; ci++) {
+    const cell = gridEl.children[ri * cols + ci];
+    if (!(cell instanceof HTMLElement)) return false;
+    const state = row.states[ci];
+    const letter = row.letters[ci];
+    cell.className = 'cell';
+    cell.setAttribute('role', 'gridcell');
+    if (state !== 'empty') cell.classList.add(state);
+    if (state === 'locked' || state === 'given') cell.classList.add('correct', 'given');
+    if (state === 'typed' || state === 'pending') cell.classList.add('pending');
+    cell.classList.remove('editable', 'cursor');
+    cell.removeAttribute('aria-current');
+    let span = cell.querySelector('.cell-char');
+    if (!span) {
+      span = document.createElement('span');
+      span.className = 'cell-char';
+      cell.appendChild(span);
+    }
+    const showDot = ri <= game.currentRow && !letter && state === 'empty';
+    span.textContent = letter || (showDot ? '·' : '');
+  }
+  return true;
+}
+
 function render(game) {
   if (motus !== game) return;
   syncGameLayoutVars(game);
@@ -1304,6 +1342,10 @@ function render(game) {
 
   focusWordPlaySurface();
   attemptsLabel.textContent = `Essai ${Math.min(game.currentRow + 1, game.maxAttempts)} / ${game.maxAttempts}`;
+
+  if (game.verifyAnimating && patchVerifyRevealRow(game)) {
+    return;
+  }
 
   gridEl.innerHTML = '';
 

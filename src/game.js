@@ -37,6 +37,8 @@ export class MotusGame {
     this.loading = false;
     this.inputLocked = false;
     this.winBallPhase = false;
+    /** Safari : mise à jour légère de la grille pendant les sons de validation. */
+    this.verifyAnimating = false;
   }
 
   async start(length) {
@@ -332,10 +334,15 @@ export class MotusGame {
       };
 
       if (isSafariBrowser()) {
-        await playVerifySequence(results, {
-          isWin: won,
-          onLetter: (i) => applyLetterResult(i),
-        }).catch(() => {});
+        this.verifyAnimating = true;
+        try {
+          await playVerifySequence(results, {
+            isWin: won,
+            onLetter: (i) => applyLetterResult(i),
+          }).catch(() => {});
+        } finally {
+          this.verifyAnimating = false;
+        }
       } else {
         for (let i = 0; i < this.length; i++) {
           applyLetterResult(i);
