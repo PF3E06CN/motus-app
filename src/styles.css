@@ -35,6 +35,8 @@
   --font-plateau: 'Arial Black', 'Arial Bold Gadget', 'Helvetica Neue', Helvetica,
     Arial, sans-serif;
   --font-body: 'DM Sans', system-ui, sans-serif;
+  /* Marge sous encoche / Dynamic Island (PWA iOS, barre noire translucide). */
+  --safe-top-extra: 0.85rem;
 }
 
 *,
@@ -56,7 +58,7 @@ html.pwa-standalone body {
 }
 
 html.pwa-standalone #app {
-  padding-top: max(1.25rem, env(safe-area-inset-top, 0px));
+  padding-top: calc(env(safe-area-inset-top, 0px) + var(--safe-top-extra));
   padding-right: max(1rem, env(safe-area-inset-right, 0px));
   padding-bottom: max(2rem, env(safe-area-inset-bottom, 0px));
   padding-left: max(1rem, env(safe-area-inset-left, 0px));
@@ -69,7 +71,7 @@ html.pwa-standalone #app {
   }
 
   #app {
-    padding-top: max(1.25rem, env(safe-area-inset-top, 0px));
+    padding-top: calc(env(safe-area-inset-top, 0px) + var(--safe-top-extra));
     padding-right: max(1rem, env(safe-area-inset-right, 0px));
     padding-bottom: max(2rem, env(safe-area-inset-bottom, 0px));
     padding-left: max(1rem, env(safe-area-inset-left, 0px));
@@ -2094,10 +2096,14 @@ body {
 /* ——— iPhone / tactile : plus d’espace jeu, clavier confortable, pas de zoom Safari ——— */
 
 body.game-in-play #app {
-  padding: 0.4rem 0.45rem 0;
+  padding-top: calc(env(safe-area-inset-top, 0px) + var(--safe-top-extra));
+  padding-right: max(0.45rem, env(safe-area-inset-right, 0px));
+  padding-bottom: 0;
+  padding-left: max(0.45rem, env(safe-area-inset-left, 0px));
   max-width: 100%;
   height: 100dvh;
   height: 100svh;
+  box-sizing: border-box;
 }
 
 body.game-in-play .app-nav {
