@@ -161,6 +161,24 @@ body {
   display: none;
 }
 
+/* Utilitaire : grille lettres, clavier, indices… (pas seulement .ball-draw.hidden) */
+.hidden {
+  display: none !important;
+}
+
+/* Pendant la grille chiffres : rien de la zone « mot » ne réserve de place */
+.game--plateau-intro #grid,
+.game--plateau-intro #keyboard,
+.game--plateau-intro .game-actions,
+.game--win-ball #grid,
+.game--win-ball #keyboard,
+.game--win-ball .game-actions {
+  display: none !important;
+  margin: 0 !important;
+  min-height: 0 !important;
+  aspect-ratio: unset !important;
+}
+
 .panel h2 {
   font-size: 1rem;
   font-weight: 600;
@@ -365,13 +383,6 @@ body {
   color: #ffd89b;
 }
 
-.ball-win-summary {
-  margin: 0.35rem 0 0.6rem;
-  font-size: 0.82rem;
-  color: var(--text-muted);
-  line-height: 1.35;
-}
-
 /* Grille tirage Motus TV : fond bleu, filets clairs, boules jaunes (#f1c40f), chiffres noirs */
 .ball-motus-grid {
   display: grid;
@@ -529,13 +540,6 @@ body {
   filter: brightness(1.08);
 }
 
-.ball-draw-urn {
-  margin: 0.1rem 0 0.45rem;
-  font-size: 0.78rem;
-  color: #ffe0a8;
-  letter-spacing: 0.06em;
-}
-
 .win-ball-slots {
   display: flex;
   justify-content: center;
@@ -603,18 +607,10 @@ body {
   text-shadow: 0 1px 0 rgba(255, 255, 255, 0.35);
 }
 
-.ball-draw-hint {
-  margin: 0 0 0.65rem;
-  font-size: 0.76rem;
-  color: var(--text-muted);
-  line-height: 1.35;
-}
-
 #btn-win-continue {
   margin-top: 0.15rem;
 }
 
-.game--win-ball .typing-indicator,
 .game--win-ball .message {
   opacity: 0.55;
 }
@@ -819,7 +815,7 @@ body {
   filter: brightness(1.04);
 }
 
-/* Bien placé reporté : rouge, modifiable (clic ou frappe sur la colonne) */
+/* Bien placé reporté : rouge, prérempli mais réécrivable (épeler tout le mot) */
 .cell.given.correct {
   animation: none;
   cursor: pointer;
@@ -837,13 +833,47 @@ body {
   filter: brightness(1.12);
 }
 
+/* Case où la prochaine lettre sera tapée */
 .cell.cursor {
-  outline: 2px solid #fff;
-  outline-offset: -3px;
+  position: relative;
+  z-index: 2;
+  outline: 3px solid #ffeb3b;
+  outline-offset: -1px;
   box-shadow:
     inset 0 2px 3px var(--cell-bevel-light),
     inset 0 -4px 7px var(--cell-bevel-dark),
-    0 0 0 2px rgba(255, 255, 255, 0.5);
+    0 0 0 2px #fff,
+    0 0 0 5px rgba(255, 235, 59, 0.95),
+    0 0 14px rgba(255, 235, 59, 0.55);
+  animation: typing-cell-pulse 1.1s ease-in-out infinite;
+}
+
+@keyframes typing-cell-pulse {
+  0%,
+  100% {
+    outline-color: #ffeb3b;
+    box-shadow:
+      inset 0 2px 3px var(--cell-bevel-light),
+      inset 0 -4px 7px var(--cell-bevel-dark),
+      0 0 0 2px #fff,
+      0 0 0 5px rgba(255, 235, 59, 0.95),
+      0 0 12px rgba(255, 235, 59, 0.45);
+  }
+  50% {
+    outline-color: #fff59d;
+    box-shadow:
+      inset 0 2px 3px var(--cell-bevel-light),
+      inset 0 -4px 7px var(--cell-bevel-dark),
+      0 0 0 2px #fff,
+      0 0 0 6px rgba(255, 255, 255, 0.9),
+      0 0 18px rgba(255, 235, 59, 0.75);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .cell.cursor {
+    animation: none;
+  }
 }
 
 .cell.locked {
@@ -881,41 +911,6 @@ body {
   box-shadow:
     inset 0 2px 3px rgba(255, 255, 255, 0.45),
     inset 0 -5px 8px rgba(60, 0, 0, 0.45);
-}
-
-.typing-indicator {
-  width: var(--grid-width);
-  max-width: 100%;
-  margin-inline: auto;
-  min-height: 1.5rem;
-  display: flex;
-  flex-direction: column;
-  align-items: stretch;
-  gap: 0.15rem;
-}
-
-.typing-indicator-label {
-  font-family: var(--font-body);
-  font-size: 0.72rem;
-  font-weight: 600;
-  color: var(--text-muted);
-  text-align: center;
-}
-
-.typing-indicator-cells {
-  display: grid;
-  grid-template-columns: repeat(var(--word-len, 6), 1fr);
-  font-family: var(--font-plateau);
-  font-size: clamp(0.7rem, calc(88cqi / var(--word-len, 6)), 1.35rem);
-  font-weight: 900;
-  color: #ffeb3b;
-  text-align: center;
-  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.5);
-  container-type: inline-size;
-}
-
-.typing-cell {
-  display: block;
 }
 
 .message {

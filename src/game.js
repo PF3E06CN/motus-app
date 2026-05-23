@@ -1,7 +1,13 @@
 import { evaluateGuess } from './evaluate.js';
 import { isValidWord, loadDictionaries, pickRandomWord } from './dictionary.js';
 import { writeReponseFile } from './dev-reponse.js';
-import { playErrorBuzz, playVerifyLetterSound, playWinFanfare, unlockAudioSync } from './sounds.js';
+import {
+  playErrorBuzz,
+  playVerifyLetterSound,
+  playWinFanfare,
+  unlockAudioSync,
+  warmIOSVerifyAudio,
+} from './sounds.js';
 
 const AZERTY_ROWS = [
   'AZERTYUIOP',
@@ -17,21 +23,17 @@ export class MotusGame {
     this.maxAttempts = 6;
     this.target = '';
     this.verifySet = null;
-    /** Mots possibles pour la longueur en cours (conservé pour enchaîner sans rechargement). */
     this.targets = null;
     this.rows = [];
     this.currentRow = 0;
     this.cursorIndex = 0;
-    /** Colonne où la prochaine frappe s’applique (0 → fin, mot entier). */
+    /** Prochaine lettre à épeler (0 → fin du mot, comme à la télé). */
     this.nextTypeCol = 0;
-    /** Positions bien placées (conservées d’un essai à l’autre). */
     this.placement = [];
     this.absentLetters = new Set();
     this.finished = false;
     this.loading = false;
-    /** Pendant la correction lettre à lettre : pas de frappe ni curseur. */
     this.inputLocked = false;
-    /** Après victoire : phase grille Motus 5×5 + tirage de boules (comme à l’émission). */
     this.winBallPhase = false;
   }
 
@@ -50,10 +52,6 @@ export class MotusGame {
     this.emit();
   }
 
-  /**
-   * Nouveau mot sans repasser par l’écran « Chargement » (après victoire + tirage plateau).
-   * Réutilise les listes déjà chargées ; sinon retombe sur {@code start}.
-   */
   startNextWordAfterWin() {
     if (!Array.isArray(this.targets) || this.targets.length === 0 || !this.verifySet) {
       void this.start(this.length);
@@ -82,40 +80,36 @@ export class MotusGame {
     return this.rows[this.currentRow];
   }
 
-  isGivenState(state) {
-    return state === 'given';
-  }
-
-  isDraftState(state) {
-    return state === 'typed';
-  }
-
-  isFilledState(state) {
-    return state === 'starter' || this.isGivenState(state) || this.isDraftState(state);
-  }
-
-  /** Première case : lettre affichée, à confirmer au clavier (starter) puis verrouillée (given). */
+  /** Case de la ligne en cours : on peut toujours réécrire (préremplie ou vide). */
   isLetterEditable(index) {
     const row = this.getActiveRow();
     if (!row || index < 0 || index >= this.length) return false;
     const s = row.states[index];
-    return s === 'starter' || s === 'empty' || s === 'typed' || s === 'given';
-  }
-
-  /** Curseur sur la ligne en cours. */
-  isCursorCell(index) {
-    const row = this.getActiveRow();
-    if (!row || index < 0 || index >= this.length) return false;
-    return this.isLetterEditable(index);
+    return s === 'empty' || s === 'typed' || s === 'given';
   }
 
   initCursor() {
     this.cursorIndex = Math.min(this.nextTypeCol, this.length - 1);
   }
 
+  /** Remet la préremplique d’une colonne bien placée. */
+  restorePrefill(row, index) {
+    if (index === 0 || this.placement[index] === 'correct') {
+      row.letters[index] = this.target[index];
+      row.states[index] = 'given';
+      return;
+    }
+    row.letters[index] = '';
+    row.states[index] = 'empty';
+  }
+
+  isPrefilledCol(index) {
+    return index === 0 || this.placement[index] === 'correct';
+  }
+
   setCursor(index) {
     if (this.finished || this.loading || this.inputLocked || this.winBallPhase) return;
-    if (!this.isCursorCell(index)) return;
+    if (!this.isLetterEditable(index)) return;
     this.cursorIndex = index;
     this.nextTypeCol = index;
     this.message = '';
@@ -124,19 +118,8 @@ export class MotusGame {
 
   moveCursor(delta) {
     if (this.finished || this.loading || this.inputLocked || this.winBallPhase) return;
-    const pool = [];
-    for (let i = 0; i < this.length; i++) {
-      if (this.isCursorCell(i)) pool.push(i);
-    }
-    if (pool.length === 0) return;
-    const pos = pool.indexOf(this.cursorIndex);
-    const next =
-      pos === -1
-        ? pool[0]
-        : pool[(pos + delta + pool.length) % pool.length];
-    this.cursorIndex = next;
-    this.nextTypeCol = next;
-    this.emit();
+    const next = Math.max(0, Math.min(this.length - 1, this.cursorIndex + delta));
+    this.setCursor(next);
   }
 
   newRow() {
@@ -147,53 +130,38 @@ export class MotusGame {
     });
     const row = this.rows[this.currentRow];
 
-    row.letters[0] = this.target[0];
-    if (this.currentRow === 0) {
-      row.states[0] = 'starter';
-    } else if (this.placement[0] === 'correct') {
-      row.states[0] = 'given';
-    }
-
-    for (let i = 1; i < this.length; i++) {
-      if (this.placement[i] === 'correct') {
+    for (let i = 0; i < this.length; i++) {
+      if (this.isPrefilledCol(i)) {
         row.letters[i] = this.target[i];
         row.states[i] = 'given';
       }
     }
 
     this.nextTypeCol = 0;
-    this.initCursor();
+    this.cursorIndex = 0;
   }
 
   typeLetter(letter) {
-    if (this.finished || this.loading || this.inputLocked || this.winBallPhase) return;
+    if (this.finished || this.loading || this.winBallPhase) return;
+    if (this.inputLocked) {
+      this.message = 'Correction en cours…';
+      this.emit();
+      return;
+    }
     const ch = letter.toUpperCase();
     if (!/^[A-Z]$/.test(ch)) return;
 
     const row = this.getActiveRow();
-    if (this.nextTypeCol >= this.length) return;
+    if (!row) return;
 
     const idx = this.nextTypeCol;
-    const state = row.states[idx];
+    if (idx >= this.length) return;
 
-    if (state === 'starter') {
-      if (ch !== row.letters[0]) {
-        this.message = `Tapez la lettre affichée (${row.letters[0]}).`;
-        this.emit();
-        return;
-      }
-      row.letters[idx] = ch;
-      row.states[idx] = 'given';
-    } else if (state === 'given') {
-      row.letters[idx] = ch;
-      row.states[idx] = ch === this.target[idx] ? 'given' : 'typed';
-    } else if (state === 'empty') {
-      row.letters[idx] = ch;
+    row.letters[idx] = ch;
+    if (row.states[idx] === 'empty') {
       row.states[idx] = 'typed';
-    } else if (state === 'typed') {
-      row.letters[idx] = ch;
-    } else {
-      return;
+    } else if (row.states[idx] === 'given' && ch !== this.target[idx]) {
+      row.states[idx] = 'typed';
     }
 
     this.nextTypeCol = idx + 1;
@@ -203,40 +171,28 @@ export class MotusGame {
   }
 
   deleteLetter() {
-    if (this.finished || this.loading || this.inputLocked || this.winBallPhase) return;
+    if (this.finished || this.loading || this.winBallPhase) return;
+    if (this.inputLocked) {
+      this.message = 'Correction en cours…';
+      this.emit();
+      return;
+    }
     const row = this.getActiveRow();
     if (!row || this.nextTypeCol <= 0) return;
 
-    let idx = this.nextTypeCol - 1;
-    while (idx >= 0 && this.isGivenState(row.states[idx])) {
-      idx--;
-    }
-    if (idx < 0) return;
-
-    if (idx === 0 && row.states[0] === 'given' && this.currentRow > 0) {
-      return;
-    }
-
-    if (row.states[idx] === 'starter') {
-      return;
-    }
-
-    row.letters[idx] = '';
-    row.states[idx] = 'empty';
+    const idx = this.nextTypeCol - 1;
+    this.restorePrefill(row, idx);
     this.nextTypeCol = idx;
     this.initCursor();
     this.message = '';
     this.emit();
   }
 
-  /** Toutes les cases de la ligne courante sont remplies (y compris la 1ʳᵉ lettre confirmée). */
   isRowComplete() {
     const row = this.getActiveRow();
     if (!row) return false;
     for (let i = 0; i < this.length; i++) {
-      if (!row.letters[i] || row.states[i] === 'empty' || row.states[i] === 'starter') {
-        return false;
-      }
+      if (!row.letters[i] || row.states[i] === 'empty') return false;
     }
     return true;
   }
@@ -247,8 +203,7 @@ export class MotusGame {
   }
 
   buildGuess() {
-    const row = this.getActiveRow();
-    return row.letters.join('');
+    return this.getActiveRow().letters.join('');
   }
 
   rejectAttempt(message) {
@@ -267,10 +222,10 @@ export class MotusGame {
       return;
     }
     this.newRow();
+    this.message = '';
     this.emit();
   }
 
-  /** Grille perdue : buzz, puis le mot solution lettre par lettre (sons de validation). */
   async playLossRevealAnimation() {
     const row = this.rows[this.maxAttempts - 1] ?? this.getActiveRow();
     if (!row) return;
@@ -318,6 +273,7 @@ export class MotusGame {
 
   async submit() {
     unlockAudioSync();
+    void warmIOSVerifyAudio().catch(() => {});
     if (this.winBallPhase) return;
     if (this.inputLocked) {
       this.message = 'Correction en cours…';
@@ -334,13 +290,8 @@ export class MotusGame {
     const row = this.getActiveRow();
 
     if (!this.isRowComplete()) {
-      if (row?.states[0] === 'starter') {
-        this.message = `Tapez la lettre affichée (${row.letters[0]}) avant de valider.`;
-        this.emit();
-        return;
-      }
       if (!isLastAttempt) await playErrorBuzz().catch(() => {});
-      this.rejectAttempt('Mot incomplet — essai perdu.');
+      this.rejectAttempt('Mot incomplet — épeler le mot en entier.');
       return;
     }
 
@@ -394,10 +345,12 @@ export class MotusGame {
       this.goToNextAttempt();
     } finally {
       this.inputLocked = false;
+      if (!this.finished && !this.winBallPhase && this.getActiveRow()) {
+        this.emit();
+      }
     }
   }
 
-  /** Indices sous la grille (ne remplace pas la saisie). */
   getTypingIndicator() {
     const parts = [];
     for (let i = 0; i < this.length; i++) {

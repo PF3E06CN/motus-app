@@ -6,7 +6,9 @@ import {
 } from './cast-sounds.js';
 import { MotusGame, AZERTY_ROWS } from './game.js';
 import {
+  isIOSDevice,
   primeAudioContext,
+  warmIOSVerifyAudio,
   unlockAudioSync,
   clearDecodedSoundCache,
   playErrorBuzz,
@@ -59,7 +61,6 @@ const gridEl = $('#grid');
 const ballDrawEl = $('#ball-draw');
 const keyboardEl = $('#keyboard');
 const messageEl = $('#message');
-const typingEl = $('#typing-indicator');
 const attemptsLabel = $('#attempts-label');
 const modal = $('#modal');
 const modalTitle = $('#modal-title');
@@ -99,11 +100,9 @@ function isLetterGridActive(game) {
   return true;
 }
 
-/** Saisie clavier autorisée (grille lettres visible, pas pendant une correction). */
+/** Saisie clavier : grille visible (la correction bloque dans typeLetter, pas via touches grisées). */
 function isWordPlayInputReady(game) {
-  if (!isLetterGridActive(game)) return false;
-  if (game.inputLocked) return false;
-  return true;
+  return isLetterGridActive(game);
 }
 
 /** Codes touches physiques → lettre AZERTY (si `e.key` est vide ou incorrect). */
@@ -231,7 +230,6 @@ function tryStartMenuGeneriqueMutedAutoplay() {
 
 function scheduleInitialMenuGenerique() {
   const kick = () => {
-    void primeAudioContext().catch(() => {});
     tryStartMenuGeneriqueMutedAutoplay();
   };
   const schedule = () => requestAnimationFrame(() => requestAnimationFrame(kick));
@@ -466,8 +464,10 @@ function initMenu() {
   $('#btn-play').addEventListener('click', async () => {
     closeAllOverlays();
     unlockAudioSync();
-    /* Ne pas bloquer le menu sur le préchargement des sons (fetch / decode peuvent pendre). */
-    void primeAudioContext().catch(() => {});
+    /* iOS : pas de prime des sons « validation » au Jouer (sinon verify-correct peut se lancer à l’intro plateau). */
+    if (!isIOSDevice()) {
+      void primeAudioContext().catch(() => {});
+    }
     await startGame();
     if (motus?.target) primeCastLetterAudio(motus.target);
   });
@@ -1077,13 +1077,7 @@ async function animateWinBall(slotIndex, value, epochSnap = null) {
   await sleep(180);
 }
 
-async function runWinBallMotus({ word, attempts }, epochSnap) {
-  const summary = $('#ball-win-summary');
-  if (summary) {
-    summary.textContent = `Mot « ${word} » trouvé en ${attempts} essai${attempts > 1 ? 's' : ''} (+${SCORE_WORD_FOUND} pts). Score : ${sessionMotusScore}. Tirages dans l’urne.`;
-  }
-  const hint = $('#ball-draw-hint');
-  if (hint) hint.textContent = '';
+async function runWinBallMotus(epochSnap) {
   await sleep(200);
   if (shouldAbortPlateauSession(epochSnap)) return;
 
@@ -1121,15 +1115,9 @@ async function runWinBallMotus({ word, attempts }, epochSnap) {
   }
 
   const motusLine = hasMotusLineFromSet(ballPlateauSession.hitNumbers);
-  const blacks = (draw0 === BALL_BLACK ? 1 : 0) + (draw1 === BALL_BLACK ? 1 : 0);
-  const urnExhausted =
-    !ballPlateauSession.urnRemaining || ballPlateauSession.urnRemaining.length === 0;
 
   if (motusLine) {
     addSessionMotusScore(SCORE_MOTUS_LINE);
-    if (hint) {
-      hint.textContent = `Motus ! Cinq cases alignées (ligne, colonne ou diagonale) — +${SCORE_MOTUS_LINE} points. Score : ${sessionMotusScore}. La grille est réinitialisée pour la suite.`;
-    }
     unlockAudioSync();
     const motusSoundPromise = playGridMotusLineSound().catch(() => {});
     await Promise.all([
@@ -1139,31 +1127,8 @@ async function runWinBallMotus({ word, attempts }, epochSnap) {
     if (shouldAbortPlateauSession(epochSnap)) return;
     await reinitializePlateauAfterMotus(epochSnap);
     if (shouldAbortPlateauSession(epochSnap)) return;
-    if (hint) {
-      hint.textContent =
-        'Nouvelle grille Motus présentée (comme en début de partie). Les prochains tirages utiliseront cette grille et une urne neuve.';
-    }
     motus?.emit();
     return;
-  }
-
-  if (hint) {
-    const parts = [];
-    if (blacks > 0) {
-      parts.push(
-        draw0 === BALL_BLACK
-          ? 'Boule noire au premier tirage : pas de second tirage ; la main passe à l’équipe adverse.'
-          : 'Boule noire au second tirage : la main passe à l’équipe adverse.',
-      );
-    }
-    if (urnExhausted) {
-      parts.push('Toutes les boules de l’urne ont été tirées ; un Motus ou le menu réinitialise le plateau.');
-    }
-    parts.push(
-      'Les cases marquées restent pour le prochain mot. Les 8 cases face cachée sont placées pour qu’il y en ait au moins 1 et au plus 2 par ligne, colonne et diagonale (aucune ligne de 5 numéros visibles), ce qui empêche aussi de compléter une ligne dès le premier tour de tirage (une ou deux boules selon le cas).',
-    );
-    parts.push(`Score plateau : ${sessionMotusScore} points.`);
-    hint.textContent = parts.join(' ');
   }
 }
 
@@ -1238,7 +1203,7 @@ function showEndModal(payload) {
     if (winBallDrawInFlight) return;
     winBallDrawInFlight = true;
     if (motus === gameRef) gameRef.emit();
-    void runWinBallMotus(payload, epochSnap)
+    void runWinBallMotus(epochSnap)
       .catch(() => {})
       .finally(() => {
         winBallDrawInFlight = false;
@@ -1259,29 +1224,6 @@ function syncGameLayoutVars(game) {
   gridEl?.style.setProperty('--rows', String(game.maxAttempts));
 }
 
-function renderTypingIndicator(game) {
-  if (!typingEl) return;
-  let label = typingEl.querySelector('.typing-indicator-label');
-  let cellsWrap = typingEl.querySelector('.typing-indicator-cells');
-  if (!label) {
-    typingEl.replaceChildren();
-    label = document.createElement('span');
-    label.className = 'typing-indicator-label';
-    label.textContent = 'Indices :';
-    cellsWrap = document.createElement('div');
-    cellsWrap.className = 'typing-indicator-cells';
-    typingEl.append(label, cellsWrap);
-  }
-  cellsWrap.style.setProperty('--word-len', String(game.length));
-  cellsWrap.replaceChildren();
-  for (let i = 0; i < game.length; i++) {
-    const span = document.createElement('span');
-    span.className = 'typing-cell';
-    span.textContent = game.placement[i] === 'correct' ? game.target[i] : '·';
-    cellsWrap.appendChild(span);
-  }
-}
-
 function render(game) {
   if (motus !== game) return;
   syncGameLayoutVars(game);
@@ -1292,7 +1234,6 @@ function render(game) {
     gridEl.classList.add('hidden');
     keyboardEl?.classList.add('hidden');
     document.querySelector('.game-actions')?.classList.add('hidden');
-    typingEl?.classList.add('hidden');
     gridEl.classList.remove('grid--ball-pending');
     gamePanel.classList.remove('game--win-ball');
     return;
@@ -1302,13 +1243,11 @@ function render(game) {
   const inWordPlay = !game.loading && !game.winBallPhase;
   const plateauIntroPending =
     !ballPlateauSession.introSequenceComplete && (inWordPlay || inDrawPhase);
-  /** Chiffres : intro ou tirage après victoire. Lettres : saisie du mot uniquement. */
+  /** Grille chiffres (intro plateau ou tirage après victoire). */
   const showBallGrid = plateauIntroPending || inDrawPhase;
-  const showLetterGrid = inWordPlay && ballPlateauSession.introSequenceComplete;
-
-  if (showLetterGrid) {
-    ballPlateauSession.introSequenceComplete = true;
-  }
+  /** Grille lettres : uniquement pendant la saisie du mot, jamais en même temps que les chiffres. */
+  const showLetterGrid =
+    !showBallGrid && inWordPlay && ballPlateauSession.introSequenceComplete;
 
   if (ballDrawEl) {
     ballDrawEl.classList.toggle('hidden', !showBallGrid);
@@ -1318,37 +1257,47 @@ function render(game) {
       syncBallGridHitsToDom();
     }
     const slots = ballDrawEl.querySelector('.win-ball-slots');
-    const urn = ballDrawEl.querySelector('.ball-draw-urn');
     const cont = $('#btn-win-continue');
-    const summary = $('#ball-win-summary');
     slots?.classList.toggle('hidden', !inDrawPhase);
-    urn?.classList.toggle('hidden', !inDrawPhase);
     cont?.classList.toggle('hidden', !inDrawPhase);
     if (cont) {
       cont.disabled = inDrawPhase && winBallDrawInFlight;
       cont.setAttribute('aria-busy', cont.disabled ? 'true' : 'false');
     }
-    summary?.classList.toggle('hidden', !inDrawPhase);
   }
 
-  gridEl.classList.toggle('hidden', !showLetterGrid);
-  gridEl.classList.toggle('grid--ball-pending', inDrawPhase);
+  const hideLetterUi = !showLetterGrid;
+  if (gridEl) {
+    gridEl.classList.toggle('hidden', hideLetterUi);
+    gridEl.hidden = hideLetterUi;
+  }
+  gridEl?.classList.remove('grid--ball-pending');
   gamePanel.classList.toggle('game--win-ball', inDrawPhase);
-  gamePanel.classList.toggle('game--plateau-intro', plateauIntroPending);
-  keyboardEl?.classList.toggle('hidden', !showLetterGrid);
-  document.querySelector('.game-actions')?.classList.toggle('hidden', !showLetterGrid);
-  typingEl?.classList.toggle('hidden', !showLetterGrid);
-  if (!showLetterGrid) {
-    attemptsLabel?.classList.add('hidden');
-  } else {
-    attemptsLabel?.classList.remove('hidden');
-    focusWordPlaySurface();
+  gamePanel.classList.toggle('game--plateau-intro', showBallGrid);
+  if (keyboardEl) {
+    keyboardEl.classList.toggle('hidden', hideLetterUi);
+    keyboardEl.hidden = hideLetterUi;
+  }
+  const gameActions = document.querySelector('.game-actions');
+  if (gameActions) {
+    gameActions.classList.toggle('hidden', hideLetterUi);
+    gameActions.hidden = hideLetterUi;
+  }
+  if (attemptsLabel) {
+    attemptsLabel.classList.toggle('hidden', hideLetterUi);
+    attemptsLabel.hidden = hideLetterUi;
   }
 
   messageEl.textContent =
     game.winBallPhase && game.finished ? '' : game.message || '';
+
+  if (!showLetterGrid) {
+    gridEl.innerHTML = '';
+    return;
+  }
+
+  focusWordPlaySurface();
   attemptsLabel.textContent = `Essai ${Math.min(game.currentRow + 1, game.maxAttempts)} / ${game.maxAttempts}`;
-  renderTypingIndicator(game);
 
   gridEl.innerHTML = '';
 
@@ -1361,21 +1310,19 @@ function render(game) {
       const letter = row.letters[ci];
       if (state !== 'empty') cell.classList.add(state);
       if (state === 'locked' || state === 'given') cell.classList.add('correct', 'given');
-      if (state === 'starter') cell.classList.add('correct', 'starter');
       if (state === 'typed' || state === 'pending') cell.classList.add('pending');
       const isCurrent = ri === game.currentRow;
-      if (isCurrent && game.isCursorCell(ci)) {
-        if (ci === game.cursorIndex) cell.classList.add('cursor');
+      if (isCurrent && game.isLetterEditable(ci)) {
         if (!game.winBallPhase) {
-          const canClick = game.isLetterEditable(ci);
-          if (canClick) {
-            cell.classList.add('editable');
-            cell.addEventListener('click', () => game.setCursor(ci));
-          }
+          cell.classList.add('editable');
+          cell.addEventListener('click', () => game.setCursor(ci));
+        }
+        if (ci === game.nextTypeCol) {
+          cell.classList.add('cursor');
+          cell.setAttribute('aria-current', 'true');
         }
       }
-      const showDot =
-        ri <= game.currentRow && !letter && state !== 'starter';
+      const showDot = ri <= game.currentRow && !letter && state === 'empty';
       const span = document.createElement('span');
       span.className = 'cell-char';
       span.textContent = letter || (showDot ? '·' : '');
@@ -1384,14 +1331,14 @@ function render(game) {
     }
   });
 
-  renderKeyboard(game, isWordPlayInputReady(game));
+  const letterActive = isLetterGridActive(game);
+  const inputReady = isWordPlayInputReady(game);
+  renderKeyboard(game, inputReady);
   const sub = $('#btn-submit');
   const del = $('#btn-delete');
   const nb = $('#btn-new');
-  const letterActive = isLetterGridActive(game);
-  const inputReady = isWordPlayInputReady(game);
-  if (sub) sub.disabled = !letterActive;
-  if (del) del.disabled = !inputReady;
+  if (sub) sub.disabled = !letterActive || game.inputLocked;
+  if (del) del.disabled = !inputReady || game.inputLocked;
   if (nb) nb.disabled = !!(game.winBallPhase && game.finished);
   if (overlayDebug && !overlayDebug.classList.contains('hidden')) {
     refreshDebugPanel();
@@ -1446,7 +1393,8 @@ function bindControls() {
     if (!motus || !isLetterGridActive(motus)) return;
     unlockAudioSync();
     void primeAudioContext().catch(() => {});
-    void motus.submit();
+    void warmIOSVerifyAudio().catch(() => {});
+    void motus.submit().then(() => focusWordPlaySurface());
   });
   $('#btn-delete').addEventListener('click', () => motus?.deleteLetter());
   gamePanel.addEventListener(
@@ -1482,11 +1430,12 @@ function bindControls() {
       if (e.key === 'Enter' || e.key === 'NumpadEnter') {
         e.preventDefault();
         unlockAudioSync();
-        void motus.submit();
+        void motus.submit().then(() => focusWordPlaySurface());
         return;
       }
 
-      if (!isWordPlayInputReady(motus)) return;
+      if (!isLetterGridActive(motus)) return;
+      if (motus.inputLocked) return;
 
       if (e.key === 'Backspace') {
         e.preventDefault();
@@ -1529,7 +1478,7 @@ function bindMenuGeneriqueListener() {
     lastMenuAudioUiAt = now;
     unlockAudioSync();
     const gen = document.getElementById('motus-snd-generique');
-    if (gen instanceof HTMLAudioElement && gen.paused) {
+    if (gen instanceof HTMLAudioElement && gen.paused && !isIOSDevice()) {
       void primeAudioContext().catch(() => {});
     }
     syncMenuGenerique();
