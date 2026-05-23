@@ -1487,6 +1487,24 @@ body {
   border-color: rgba(255, 255, 255, 0.15);
 }
 
+.key.well-placed {
+  color: #fff;
+  text-shadow:
+    0 1px 0 rgba(90, 0, 0, 0.52),
+    0 2px 3px rgba(0, 0, 0, 0.32);
+  border-color: rgba(255, 255, 255, 0.65);
+  background: linear-gradient(
+    180deg,
+    var(--cell-red-top) 0%,
+    var(--cell-red-mid) 42%,
+    var(--cell-red-bottom) 78%,
+    var(--cell-red-deep) 100%
+  );
+  box-shadow:
+    inset 0 2px 3px rgba(255, 255, 255, 0.45),
+    inset 0 -5px 8px rgba(60, 0, 0, 0.45);
+}
+
 .key.wrong-place {
   color: #1a1a1a;
   text-shadow: 0 1px 0 rgba(255, 255, 255, 0.35);

@@ -2202,6 +2202,7 @@ function renderKeyboard(game, letterUiReady = true) {
       }
       key.textContent = ch;
       if (game.absentLetters.has(ch)) key.classList.add('absent');
+      else if (game.correctPlaceLetters?.has(ch)) key.classList.add('well-placed');
       else if (game.wrongPlaceLetters?.has(ch)) key.classList.add('wrong-place');
       const canType = letterUiReady;
       if (canType) {

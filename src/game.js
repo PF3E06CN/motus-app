@@ -51,6 +51,8 @@ export class MotusGame {
     this.nextTypeCol = 0;
     this.placement = [];
     this.absentLetters = new Set();
+    /** Lettres déjà révélées bien placées (rouge) — affichées en rouge sur le clavier. */
+    this.correctPlaceLetters = new Set();
     /** Lettres déjà révélées mal placées (jaune) — affichées en jaune sur le clavier. */
     this.wrongPlaceLetters = new Set();
     this.finished = false;
@@ -129,6 +131,7 @@ export class MotusGame {
     if (idx < 0) return;
 
     this.placement[idx] = 'correct';
+    this.correctPlaceLetters.add(this.target[idx]);
     this.wrongPlaceLetters.delete(this.target[idx]);
     const row = this.getActiveRow();
     if (row) {
@@ -191,7 +194,9 @@ export class MotusGame {
     this.placement = Array(this.length).fill(null);
     this.placement[0] = 'correct';
     this.absentLetters = new Set();
+    this.correctPlaceLetters = new Set();
     this.wrongPlaceLetters = new Set();
+    if (this.target?.[0]) this.correctPlaceLetters.add(this.target[0]);
     this.finished = false;
     this.inputLocked = false;
     this.winBallPhase = false;
@@ -558,6 +563,7 @@ export class MotusGame {
         row.states[i] = results[i];
         if (results[i] === 'correct') {
           this.placement[i] = 'correct';
+          this.correctPlaceLetters.add(ch);
           this.wrongPlaceLetters.delete(ch);
         }
         if (results[i] === 'wrong') {
