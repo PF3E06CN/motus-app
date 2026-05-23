@@ -37,6 +37,20 @@
   --font-body: 'DM Sans', system-ui, sans-serif;
   /* Marge sous encoche / Dynamic Island (PWA iOS, barre noire translucide). */
   --safe-top-extra: 0.85rem;
+  /* Hauteur réelle du viewport (JS iOS) ; repli = grand viewport (pas small/svh). */
+  --motus-viewport-h: 100vh;
+  --motus-viewport-h: 100dvh;
+  --motus-viewport-h: 100lvh;
+  --motus-bg-image:
+    radial-gradient(ellipse 130% 95% at 50% -8%, var(--motus-red-bright) 0%, transparent 62%),
+    linear-gradient(
+      90deg,
+      var(--motus-red-dark) 0%,
+      var(--motus-red) 22%,
+      var(--motus-red-bright) 50%,
+      var(--motus-red) 78%,
+      var(--motus-red-dark) 100%
+    );
 }
 
 *,
@@ -50,6 +64,23 @@ html {
   -webkit-text-size-adjust: 100%;
   touch-action: manipulation;
   overscroll-behavior: none;
+  height: var(--motus-viewport-h);
+  min-height: -webkit-fill-available;
+  background-color: var(--motus-red);
+}
+
+/* Fond plein écran (couche DOM : plus fiable que ::before seul sur iOS PWA). */
+.motus-page-bg {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: var(--motus-viewport-h);
+  min-height: -webkit-fill-available;
+  z-index: -1;
+  background-color: var(--motus-red);
+  background-image: var(--motus-bg-image);
+  pointer-events: none;
 }
 
 /* PWA « Ajouter à l’écran d’accueil » (iOS / Android) */
@@ -60,7 +91,7 @@ html.pwa-standalone body {
 html.pwa-standalone #app {
   padding-top: calc(env(safe-area-inset-top, 0px) + var(--safe-top-extra));
   padding-right: max(1rem, env(safe-area-inset-right, 0px));
-  padding-bottom: max(2rem, env(safe-area-inset-bottom, 0px));
+  padding-bottom: max(0.75rem, env(safe-area-inset-bottom, 0px));
   padding-left: max(1rem, env(safe-area-inset-left, 0px));
 }
 
@@ -73,36 +104,42 @@ html.pwa-standalone #app {
   #app {
     padding-top: calc(env(safe-area-inset-top, 0px) + var(--safe-top-extra));
     padding-right: max(1rem, env(safe-area-inset-right, 0px));
-    padding-bottom: max(2rem, env(safe-area-inset-bottom, 0px));
+    padding-bottom: max(0.75rem, env(safe-area-inset-bottom, 0px));
     padding-left: max(1rem, env(safe-area-inset-left, 0px));
   }
 }
 
 body {
   margin: 0;
-  min-height: 100dvh;
+  height: var(--motus-viewport-h);
+  min-height: -webkit-fill-available;
   font-family: var(--font-body);
   color: var(--text);
-  background:
-    radial-gradient(ellipse 120% 70% at 50% 0%, var(--motus-red-bright) 0%, transparent 50%),
-    linear-gradient(
-      90deg,
-      var(--motus-red-dark) 0%,
-      var(--motus-red) 22%,
-      var(--motus-red-bright) 50%,
-      var(--motus-red) 78%,
-      var(--motus-red-dark) 100%
-    );
-  background-color: var(--motus-red);
+  background: transparent;
+  display: flex;
+  flex-direction: column;
 }
 
 #app {
   max-width: 520px;
+  width: 100%;
   margin: 0 auto;
-  padding: 1.25rem 1rem 2rem;
-  min-height: 100dvh;
+  padding: 1.25rem 1rem max(1rem, env(safe-area-inset-bottom, 0px));
+  flex: 1 1 auto;
+  min-height: 0;
   display: flex;
   flex-direction: column;
+}
+
+/* Menu / astuce PWA : occupe la hauteur sous la barre d’onglets (évite le vide en bas). */
+body:not(.game-in-play) #menu.menu-setup:not(.hidden),
+body:not(.game-in-play) #pwa-install-hint:not(.hidden) {
+  flex: 1 1 auto;
+  min-height: 0;
+  width: 100%;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  justify-content: flex-start;
 }
 
 .header {
@@ -2258,8 +2295,8 @@ body.game-in-play #app {
   padding-bottom: 0;
   padding-left: max(0.45rem, env(safe-area-inset-left, 0px));
   max-width: 100%;
-  height: 100dvh;
-  height: 100svh;
+  flex: 1 1 auto;
+  min-height: 0;
   box-sizing: border-box;
 }
 
@@ -2390,9 +2427,10 @@ body.game-in-play .message {
     --play-w: calc(100vw - 2 * var(--play-gutter) - 0.2rem);
     --grid-width: var(--play-w);
     --cell-target: calc((var(--grid-width) - 0.625rem) / var(--word-len));
-    --kb-gap: 0.28rem;
+    --kb-gap: 0.24rem;
     --kb-key-w: calc((var(--play-w) - 9 * var(--kb-gap)) / 10);
-    --kb-key-h: min(var(--kb-key-w), 3.35rem);
+    /* Hauteur des touches : rehaussée dans @container kb-zone (espace sous la grille). */
+    --kb-key-h: clamp(3.35rem, var(--kb-key-w), 6rem);
     flex: 1 1 auto;
     min-height: 0;
     display: flex;
@@ -2422,23 +2460,20 @@ body.game-in-play .message {
     margin-inline: auto;
     display: flex;
     flex-direction: column;
-    justify-content: center;
+    justify-content: flex-end;
     align-items: center;
     container-type: size;
     container-name: kb-zone;
-    padding-bottom: max(0.35rem, env(safe-area-inset-bottom));
+    padding-bottom: max(0.35rem, env(safe-area-inset-bottom, 0px));
     box-sizing: border-box;
   }
 
   @container kb-zone (min-height: 6rem) {
     body.game-in-play .keyboard {
       --kb-key-h: clamp(
-        2.5rem,
-        min(
-          calc((100cqh - 2 * var(--kb-gap)) / 3),
-          calc((100cqw - 9 * var(--kb-gap)) / 10)
-        ),
-        4.5rem
+        3.35rem,
+        calc((100cqh - 2 * var(--kb-gap)) / 3),
+        6rem
       );
     }
   }
@@ -2482,7 +2517,7 @@ body.game-in-play .message {
     min-width: 0;
     min-height: 0;
     padding: 0;
-    font-size: clamp(1rem, calc(var(--kb-key-h) * 0.46), 1.65rem);
+    font-size: clamp(1.05rem, calc(var(--kb-key-h) * 0.44), 1.85rem);
     line-height: 1;
     border-radius: 8px;
   }
@@ -2535,6 +2570,7 @@ body.game-in-play .message {
     display: block;
     font-weight: 400;
     letter-spacing: -0.08em;
+    font-size: clamp(1.35rem, calc(var(--kb-key-h) * 0.55), 1.85rem);
   }
 
   body.game-in-play .kb-action--return {
@@ -2548,7 +2584,7 @@ body.game-in-play .message {
 
   body.game-in-play .kb-action--return .kb-action-icon {
     display: block;
-    font-size: 1.35rem;
+    font-size: clamp(1.35rem, calc(var(--kb-key-h) * 0.55), 1.9rem);
     line-height: 1;
   }
 

@@ -1243,7 +1243,12 @@ function initMenu() {
     } catch {
       /* ignore */
     }
-    syncPwaInstallHintVisibility();
+    if (!playMenuRevealed) {
+      playMenuRevealed = true;
+      syncPlayMenuVisibility();
+    } else {
+      syncPwaInstallHintVisibility();
+    }
   });
   $('#menu-setup-prev')?.addEventListener('click', menuSetupWizardPrev);
   $('#menu-setup-next')?.addEventListener('click', menuSetupWizardNext);
@@ -2562,6 +2567,29 @@ function bindMenuGeneriqueListener() {
   }
 }
 
+/** Hauteur écran réelle (iOS : visualViewport seul laisse une bande rouge sous le contenu). */
+function syncViewportHeight() {
+  const root = document.documentElement;
+  const layoutH = window.innerHeight;
+  const vv = window.visualViewport;
+  const visualTotal = vv ? Math.round(vv.height + vv.offsetTop) : layoutH;
+  const h = Math.max(layoutH, visualTotal, root.clientHeight);
+  root.style.setProperty('--motus-viewport-h', `${h}px`);
+}
+
+function bindViewportHeightSync() {
+  syncViewportHeight();
+  requestAnimationFrame(() => {
+    syncViewportHeight();
+    requestAnimationFrame(syncViewportHeight);
+  });
+  window.addEventListener('resize', syncViewportHeight, { passive: true });
+  window.addEventListener('orientationchange', syncViewportHeight, { passive: true });
+  window.addEventListener('pageshow', syncViewportHeight, { passive: true });
+  window.visualViewport?.addEventListener('resize', syncViewportHeight, { passive: true });
+  window.visualViewport?.addEventListener('scroll', syncViewportHeight, { passive: true });
+}
+
 /** iOS « Ajouter à l’écran d’accueil » : classe pour styles standalone (encoche, safe-area). */
 function initStandalonePwa() {
   const standalone =
@@ -2575,8 +2603,13 @@ loadAudioSettings();
 syncAudioSettingsToDom();
 applyMusicSetting();
 
+bindViewportHeightSync();
 initStandalonePwa();
 initMenu();
+// PWA installée : menu direct. Safari mobile : tuto d’abord, menu après « Jouer » ou « Ne plus afficher ».
+if (isPwaStandalone() || (mobileKeyboardMq().matches && isPwaInstallHintDismissed())) {
+  playMenuRevealed = true;
+}
 syncPlayMenuVisibility();
 if (gamePanel && !gamePanel.hasAttribute('tabindex')) {
   gamePanel.setAttribute('tabindex', '-1');
