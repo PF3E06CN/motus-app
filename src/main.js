@@ -7,6 +7,7 @@ import {
 } from './cast-sounds.js';
 import {
   getAudioSettings,
+  getMusicVolume,
   isMusicEnabled,
   loadAudioSettings,
   setAudioSettings,
@@ -107,6 +108,10 @@ const MENU_SETUP_STEP_COUNT = 4;
 let menuSetupStep = 1;
 
 const MENU_GENERIQUE_VOL = 0.42;
+
+function menuGeneriqueEffectiveVolume() {
+  return MENU_GENERIQUE_VOL * getMusicVolume();
+}
 
 /** Lecture muette démarrée au chargement ; levée au 1er sync (geste ou nav). */
 let menuGeneriqueAwaitingGestureUnmute = false;
@@ -283,7 +288,7 @@ function playGeneriqueTrack(opts = {}) {
     return Promise.resolve('off');
   }
   el.loop = loop;
-  el.volume = MENU_GENERIQUE_VOL;
+  el.volume = menuGeneriqueEffectiveVolume();
   if (resetTime) {
     try {
       el.currentTime = 0;
@@ -334,7 +339,10 @@ function applyMusicSetting() {
     if (el instanceof HTMLAudioElement) el.muted = true;
     return;
   }
-  if (el instanceof HTMLAudioElement) el.muted = false;
+  if (el instanceof HTMLAudioElement) {
+    el.muted = false;
+    el.volume = menuGeneriqueEffectiveVolume();
+  }
   if (gamePanel.classList.contains('hidden')) syncMenuGenerique();
 }
 
@@ -356,7 +364,7 @@ function tryStartMenuGeneriqueMutedAutoplay() {
     return;
   }
   el.loop = true;
-  el.volume = MENU_GENERIQUE_VOL;
+  el.volume = menuGeneriqueEffectiveVolume();
   el.muted = true;
   const p = el.play();
   if (p === undefined) {
@@ -423,7 +431,7 @@ function syncMenuGenerique() {
     }
   }
   el.loop = true;
-  el.volume = MENU_GENERIQUE_VOL;
+  el.volume = menuGeneriqueEffectiveVolume();
   el.muted = false;
   if (el.paused || el.ended) {
     const p = el.play();
@@ -446,7 +454,7 @@ function handoffGeneriqueToMenuMusic() {
   }
   unlockAudioSync();
   el.loop = true;
-  el.volume = MENU_GENERIQUE_VOL;
+  el.volume = menuGeneriqueEffectiveVolume();
   if (el.paused || el.ended) {
     void playGeneriqueTrack({ loop: true, resetTime: false });
     return;
@@ -475,7 +483,7 @@ function restartMenuGenerique() {
   unlockAudioSync();
   menuGeneriqueAwaitingGestureUnmute = false;
   el.loop = true;
-  el.volume = MENU_GENERIQUE_VOL;
+  el.volume = menuGeneriqueEffectiveVolume();
   el.muted = false;
   try {
     el.pause();
@@ -1341,7 +1349,6 @@ function initMenu() {
   for (const id of ['audio-mute-voices', 'audio-mute-music', 'audio-mute-sfx']) {
     $(`#${id}`)?.addEventListener('change', readAudioSettingsFromDom);
   }
-
   updateNavHighlight();
 }
 

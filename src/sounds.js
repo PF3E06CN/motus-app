@@ -6,7 +6,11 @@
  * 3) Bips synthétiques si tout échoue.
  */
 
-import { isSfxEnabled, isVoicesEnabled } from './audio-settings.js';
+import { getSfxVolume, isSfxEnabled, isVoicesEnabled } from './audio-settings.js';
+
+function sfxElementVolume() {
+  return Math.min(1, Math.max(0, getSfxVolume()));
+}
 
 const EXT_PRIORITY = ['.mp3'];
 
@@ -857,7 +861,7 @@ async function playBufferOnce(ctx, buf) {
   await new Promise((resolve) => {
     const src = ctx.createBufferSource();
     const gain = ctx.createGain();
-    gain.gain.value = 1;
+    gain.gain.value = sfxElementVolume();
     src.buffer = buf;
     src.connect(gain);
     gain.connect(ctx.destination);
@@ -1506,6 +1510,7 @@ async function playPlateauDomToEnd(domId, opts = {}) {
   try {
     el.muted = false;
     el.currentTime = 0;
+    el.volume = sfxElementVolume();
   } catch {
     return false;
   }
@@ -1662,6 +1667,7 @@ async function playPlateauEphemeralDomToEnd(domId, opts = {}) {
   try {
     el.muted = false;
     el.currentTime = 0;
+    el.volume = sfxElementVolume();
     const p = el.play();
     if (p !== undefined) await p;
   } catch {
@@ -1945,8 +1951,11 @@ function firePlateauClip(ctx, cacheKey, clipSec) {
   if (!isUsableDecodedBuffer(buf)) return null;
   const cap = plateauClipCapSec(buf, clipSec);
   const src = ctx.createBufferSource();
+  const gain = ctx.createGain();
+  gain.gain.value = sfxElementVolume();
   src.buffer = buf;
-  src.connect(ctx.destination);
+  src.connect(gain);
+  gain.connect(ctx.destination);
   const t0 = ctx.currentTime + 0.003;
   src.start(t0);
   src.stop(t0 + cap);

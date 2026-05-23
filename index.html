@@ -105,7 +105,7 @@
       <nav class="app-nav" aria-label="Navigation principale">
         <button type="button" class="nav-tab active" data-nav="play" id="nav-play">Jouer</button>
         <button type="button" class="nav-tab" data-nav="aide" id="nav-aide">Règles</button>
-        <button type="button" class="nav-tab" data-nav="settings" id="nav-settings">Paramètres</button>
+        <button type="button" class="nav-tab" data-nav="settings" id="nav-settings">Audio</button>
         <button type="button" class="nav-tab" data-nav="credits" id="nav-credits">Crédits</button>
         <button type="button" class="nav-tab" data-nav="debug" id="nav-debug">Debug</button>
       </nav>
@@ -431,25 +431,26 @@
         <div class="app-overlay-card" role="document">
           <div class="app-overlay-top">
             <button type="button" class="btn-overlay-back" data-close-overlay aria-label="Retour">🡰</button>
-            <h2 class="app-overlay-title">Paramètres</h2>
+            <h2 class="app-overlay-title">Réglages audio</h2>
           </div>
           <div class="app-overlay-body">
-            <h3 class="app-overlay-h3">Son</h3>
-            <label class="menu-field menu-field--checkbox" for="audio-mute-voices">
-              <input type="checkbox" id="audio-mute-voices" />
-              <span>Couper les voix (animateur, 1ʳᵉ lettre, numéros tirés)</span>
-            </label>
-            <label class="menu-field menu-field--checkbox" for="audio-mute-music">
-              <input type="checkbox" id="audio-mute-music" />
-              <span>Couper la musique du menu (générique)</span>
-            </label>
-            <label class="menu-field menu-field--checkbox" for="audio-mute-sfx">
-              <input type="checkbox" id="audio-mute-sfx" />
-              <span>Couper les effets sonores (plateau, validation, victoire…)</span>
-            </label>
+            <div class="audio-settings-panel">
+              <label class="menu-field menu-field--checkbox" for="audio-mute-voices">
+                <input type="checkbox" id="audio-mute-voices" />
+                <span>Couper les voix (animateur, 1ʳᵉ lettre, numéros tirés)</span>
+              </label>
+              <label class="menu-field menu-field--checkbox" for="audio-mute-music">
+                <input type="checkbox" id="audio-mute-music" />
+                <span>Couper la musique du menu (générique)</span>
+              </label>
+              <label class="menu-field menu-field--checkbox" for="audio-mute-sfx">
+                <input type="checkbox" id="audio-mute-sfx" />
+                <span>Couper les effets sonores (plateau, validation, victoire…)</span>
+              </label>
+            </div>
             <p class="app-overlay-muted">
-              Ces réglages sont mémorisés sur cet appareil. La musique et les voix reprennent au menu ; les effets
-              concernent la partie en cours.
+              Réglages mémorisés sur cet appareil. Les effets concernent la partie en cours ; la musique reprend au
+              menu.
             </p>
 
             <h3 class="app-overlay-h3">Partie</h3>
@@ -497,6 +498,11 @@
                 rel="noopener noreferrer"
                 >motusJS en ligne</a
               >.
+            </p>
+            <h3 class="app-overlay-h3">Intro de lancement</h3>
+            <p>
+              Séquence d’ouverture inspirée du <strong>générique télévisé Motus (2008–2014)</strong>. Cette intro est
+              proposée en <strong>bêta</strong> dans l’application.
             </p>
           </div>
         </div>
