@@ -20,7 +20,7 @@ npm run deploy:pages
 
 Puis **Settings** → **Pages** → source **Deploy from a branch** → branche `gh-pages` → dossier `/ (root)`.
 
-Connexion Internet requise pour charger les dictionnaires (motusJS).
+Le jeu fonctionne **100 % hors ligne** une fois déployé ou servi localement (dictionnaires et sons inclus dans le dépôt).
 
 ## Lancer
 
@@ -50,7 +50,15 @@ npm run dev
 - Mot trouvé : **+50 pts** (+100 au dernier mot) puis tirage plateau ; ligne Motus : **+100 pts** ; fin de partie = classement par points.
 - Dernier mot (équipe) : tirage seulement si une ligne Motus peut encore faire gagner la partie.
 
-Les dictionnaires sont chargés depuis le dépôt motusJS (connexion Internet requise au premier chargement). Un jeu de secours local est utilisé si le réseau échoue.
+## Dictionnaires (`public/dictionary/`)
+
+Listes **mot à trouver** et **vérification** (5 à 10 lettres), origine [motusJS](https://github.com/difabiolorenzo/motusJS), copiées dans le dépôt pour jeu offline.
+
+Pour les régénérer depuis motusJS :
+
+```bash
+./scripts/sync-dictionaries.sh
+```
 
 ## Sons (`public/sounds/`)
 

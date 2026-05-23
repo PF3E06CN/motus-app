@@ -1,11 +1,22 @@
 import { FALLBACK } from './words-fallback.js';
 
-const TARGET_URL =
-  'https://raw.githubusercontent.com/difabiolorenzo/motusJS/master/src/js/dictionary/mot_a_trouver';
-const VERIFY_URL =
-  'https://raw.githubusercontent.com/difabiolorenzo/motusJS/master/src/js/dictionary/verification';
-
 const cache = { targets: {}, verify: {} };
+
+/**
+ * URL d’un fichier dictionnaire sous `public/dictionary/` (offline, servi avec l’app).
+ * @param {string} relative ex. `mot_a_trouver/6_lettres.js`
+ */
+function dictHref(relative) {
+  const baseHref =
+    (typeof import.meta !== 'undefined' && import.meta.env?.BASE_URL) || './';
+  const path = `dictionary/${relative}`;
+  try {
+    const base = new URL(baseHref, window.location.href);
+    return new URL(path, base).href;
+  } catch {
+    return `${baseHref}${path}`.replace(/([^:]\/)\/+/g, '$1');
+  }
+}
 
 function parseWordList(jsText) {
   const start = jsText.indexOf('[');
@@ -14,31 +25,28 @@ function parseWordList(jsText) {
   return JSON.parse(jsText.slice(start, end + 1));
 }
 
-async function fetchDict(url, length) {
-  const res = await fetch(`${url}/${length}_lettres.js`);
-  if (!res.ok) throw new Error(`Dictionnaire ${length} lettres indisponible`);
+async function loadDictFile(folder, length) {
+  const url = dictHref(`${folder}/${length}_lettres.js`);
+  const res = await fetch(url);
+  if (!res.ok) throw new Error(`Fichier dictionnaire introuvable (${length} lettres)`);
   const text = await res.text();
   return parseWordList(text).map((w) => w.toUpperCase());
 }
 
-async function loadRemote(length) {
+export async function loadDictionaries(length) {
   if (cache.targets[length] && cache.verify[length]) {
     return { targets: cache.targets[length], verify: cache.verify[length] };
   }
-  const [targetList, verifyList] = await Promise.all([
-    fetchDict(TARGET_URL, length),
-    fetchDict(VERIFY_URL, length),
-  ]);
-  cache.targets[length] = targetList;
-  cache.verify[length] = new Set(verifyList);
-  return { targets: targetList, verify: cache.verify[length] };
-}
-
-export async function loadDictionaries(length) {
   try {
-    return await loadRemote(length);
+    const [targetList, verifyList] = await Promise.all([
+      loadDictFile('mot_a_trouver', length),
+      loadDictFile('verification', length),
+    ]);
+    cache.targets[length] = targetList;
+    cache.verify[length] = new Set(verifyList);
+    return { targets: targetList, verify: cache.verify[length] };
   } catch (err) {
-    console.warn('Dictionnaire distant indisponible — mode local', err);
+    console.warn('Dictionnaire embarqué indisponible — jeu de secours', err);
     const fb = FALLBACK[length];
     if (!fb) throw err;
     return { targets: fb.targets, verify: fb.verify };

@@ -1,4 +1,4 @@
-/** Mots de secours si le dictionnaire distant est indisponible. */
+/** Mots de secours si les fichiers dictionnaire embarqués sont introuvables. */
 export const FALLBACK = {
   5: {
     targets: ['MAISON', 'PLAGE', 'ROUGE', 'VERTE', 'MONDE'],

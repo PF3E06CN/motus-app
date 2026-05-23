@@ -1771,7 +1771,7 @@ async function startGame() {
     try {
       await game.start(selectedLength, getPlayOptions());
     } catch {
-      /* dictionnaire / réseau */
+      /* dictionnaire embarqué */
     }
     if (motus !== game) return;
     if (game.target) primeCastLetterAudio(game.target);
