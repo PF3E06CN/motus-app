@@ -100,8 +100,10 @@ let sessionWordsCompleted = 0;
 let sessionWordsWon = 0;
 let sessionWordsLost = 0;
 let motus = null;
-/** Au chargement `false` : le panneau #menu est masqué jusqu’au clic sur « Jouer » (barre du haut). */
+/** `false` au chargement : #menu masqué jusqu’au clic sur « Jouer ». */
 let playMenuRevealed = false;
+const MENU_SETUP_STEP_COUNT = 4;
+let menuSetupStep = 1;
 
 const MENU_GENERIQUE_VOL = 0.42;
 
@@ -479,18 +481,77 @@ function updateMotusScoreDom() {
   }
 }
 
+function syncMenuSetupWizard() {
+  if (!menu) return;
+  menu.querySelectorAll('[data-setup-step]').forEach((el) => {
+    const step = Number(el.dataset.setupStep);
+    const show = step === menuSetupStep;
+    el.classList.toggle('menu-card--wizard-hidden', !show);
+    el.hidden = !show;
+  });
+
+  const lead = $('#menu-setup-lead');
+  if (lead) lead.textContent = `Étape ${menuSetupStep} sur ${MENU_SETUP_STEP_COUNT}`;
+
+  const progress = menu.querySelector('.menu-setup-progress');
+  if (progress) {
+    progress.setAttribute('aria-valuenow', String(menuSetupStep));
+    progress.setAttribute(
+      'aria-label',
+      `Étape ${menuSetupStep} sur ${MENU_SETUP_STEP_COUNT}`,
+    );
+  }
+  menu.querySelectorAll('[data-step-dot]').forEach((dot) => {
+    const n = Number(dot.dataset.stepDot);
+    dot.classList.toggle('is-active', n === menuSetupStep);
+    dot.classList.toggle('is-done', n < menuSetupStep);
+  });
+
+  const prev = $('#menu-setup-prev');
+  const next = $('#menu-setup-next');
+  const launch = $('#btn-play');
+  const rules = $('#menu-setup-rules');
+  prev?.classList.toggle('hidden', menuSetupStep <= 1);
+  next?.classList.toggle('hidden', menuSetupStep >= MENU_SETUP_STEP_COUNT);
+  launch?.classList.toggle('hidden', menuSetupStep < MENU_SETUP_STEP_COUNT);
+  rules?.classList.toggle('hidden', menuSetupStep < MENU_SETUP_STEP_COUNT);
+  rules?.classList.toggle('menu-setup-rules--wizard-hidden', menuSetupStep < MENU_SETUP_STEP_COUNT);
+}
+
+function resetMenuSetupWizard() {
+  menuSetupStep = 1;
+  syncMenuSetupWizard();
+}
+
+function menuSetupWizardNext() {
+  if (menuSetupStep >= MENU_SETUP_STEP_COUNT) return;
+  menuSetupStep += 1;
+  syncMenuSetupWizard();
+}
+
+function menuSetupWizardPrev() {
+  if (menuSetupStep <= 1) return;
+  menuSetupStep -= 1;
+  syncMenuSetupWizard();
+}
+
+function syncPlayMenuVisibility() {
+  if (!menu) return;
+  const showMenu = playMenuRevealed && gamePanel.classList.contains('hidden');
+  menu.classList.toggle('hidden', !showMenu);
+}
+
 function closeAllOverlays() {
   navOverlays.forEach((el) => {
     el.classList.add('hidden');
     el.setAttribute('aria-hidden', 'true');
   });
-  if (!playMenuRevealed && gamePanel.classList.contains('hidden')) {
-    menu.classList.add('hidden');
-  }
+  syncPlayMenuVisibility();
 }
 
 function openOverlay(overlayEl) {
   closeAllOverlays();
+  menu.classList.add('hidden');
   overlayEl.classList.remove('hidden');
   overlayEl.setAttribute('aria-hidden', 'false');
   updateNavHighlight();
@@ -532,11 +593,11 @@ function setMenuLoading(loading) {
     btn.disabled = !!loading;
     if (loading) {
       if (btn.dataset.menuLabelBackup == null) {
-        btn.dataset.menuLabelBackup = (btn.textContent || '').trim() || 'Jouer';
+        btn.dataset.menuLabelBackup = (btn.textContent || '').trim() || 'Lancer la partie';
       }
       btn.textContent = 'Chargement…';
     } else {
-      btn.textContent = btn.dataset.menuLabelBackup || 'Jouer';
+      btn.textContent = btn.dataset.menuLabelBackup || 'Lancer la partie';
       delete btn.dataset.menuLabelBackup;
     }
   }
@@ -546,6 +607,8 @@ function setMenuLoading(loading) {
   document.querySelectorAll('.mode-btn, .team-size-btn').forEach((b) => {
     b.disabled = !!loading;
   });
+  $('#menu-setup-prev')?.toggleAttribute('disabled', !!loading);
+  $('#menu-setup-next')?.toggleAttribute('disabled', !!loading);
   const teamErrorSelect = $('#team-error-behavior');
   if (teamErrorSelect) teamErrorSelect.disabled = !!loading;
   const turnTimerCheckbox = $('#turn-timer-enabled');
@@ -596,6 +659,8 @@ function goToPlayMenu() {
   updateNavHighlight();
   if (wasInGame) restartMenuGenerique();
   else syncMenuGenerique();
+  resetMenuSetupWizard();
+  syncPlayMenuVisibility();
 }
 
 function getTeamPlayOptions() {
@@ -1022,6 +1087,11 @@ function initMenu() {
   $('#nav-play').addEventListener('click', () => {
     goToPlayMenu();
   });
+  $('#menu-setup-prev')?.addEventListener('click', menuSetupWizardPrev);
+  $('#menu-setup-next')?.addEventListener('click', menuSetupWizardNext);
+  const openRulesFromPlay = () => openOverlay(overlayAide);
+  $('#menu-setup-rules')?.addEventListener('click', openRulesFromPlay);
+  resetMenuSetupWizard();
   $('#nav-aide').addEventListener('click', () => {
     openOverlay(overlayAide);
   });
@@ -2270,6 +2340,7 @@ syncAudioSettingsToDom();
 applyMusicSetting();
 
 initMenu();
+syncPlayMenuVisibility();
 if (gamePanel && !gamePanel.hasAttribute('tabindex')) {
   gamePanel.setAttribute('tabindex', '-1');
 }

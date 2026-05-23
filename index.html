@@ -81,71 +81,106 @@
         <button type="button" class="nav-tab" data-nav="debug" id="nav-debug">Debug</button>
       </nav>
 
-      <section id="menu" class="panel hidden">
-        <h2>Mode de jeu</h2>
-        <div class="mode-picker" id="mode-picker" role="radiogroup" aria-label="Mode de jeu">
-          <button type="button" class="mode-btn active" data-mode="solo" aria-pressed="true">Solo</button>
-          <button type="button" class="mode-btn" data-mode="team" aria-pressed="false">Équipe</button>
+      <section id="menu" class="panel menu-setup hidden" aria-labelledby="menu-setup-title">
+        <header class="menu-setup-header">
+          <h2 id="menu-setup-title" class="menu-setup-title">Nouvelle partie</h2>
+          <p class="menu-setup-lead" id="menu-setup-lead">Étape 1 sur 4</p>
+          <div class="menu-setup-progress" role="progressbar" aria-valuemin="1" aria-valuemax="4" aria-valuenow="1">
+            <span class="menu-setup-progress__dot is-active" data-step-dot="1" aria-hidden="true"></span>
+            <span class="menu-setup-progress__dot" data-step-dot="2" aria-hidden="true"></span>
+            <span class="menu-setup-progress__dot" data-step-dot="3" aria-hidden="true"></span>
+            <span class="menu-setup-progress__dot" data-step-dot="4" aria-hidden="true"></span>
+          </div>
+        </header>
+
+        <div class="menu-setup-body">
+          <article class="menu-card menu-card--step" data-setup-step="1">
+            <h3 class="menu-card__title"><span class="menu-card__step" aria-hidden="true">1</span> Qui joue ?</h3>
+            <div class="mode-picker" id="mode-picker" role="radiogroup" aria-label="Mode de jeu">
+              <button type="button" class="mode-btn active" data-mode="solo" aria-pressed="true">
+                <span class="mode-btn__label">Solo</span>
+                <span class="mode-btn__hint">1 joueur</span>
+              </button>
+              <button type="button" class="mode-btn" data-mode="team" aria-pressed="false">
+                <span class="mode-btn__label">Équipe</span>
+                <span class="mode-btn__hint">2 à 4 équipes</span>
+              </button>
+            </div>
+
+            <div id="team-options" class="team-options menu-card__subsection hidden" aria-hidden="true">
+              <p class="menu-card__hint">Chaque équipe a son score et sa grille de chiffres. Relais à chaque essai.</p>
+              <p class="menu-card__label">Nombre d’équipes</p>
+              <div class="team-size-picker" id="team-size-picker" role="radiogroup" aria-label="Nombre d'équipes"></div>
+              <label class="menu-field" for="team-error-behavior">
+                <span class="menu-field-label">Après une erreur</span>
+                <select id="team-error-behavior" class="menu-select">
+                  <option value="add-bonus">Nouvelle ligne + lettre bonus (recommandé)</option>
+                  <option value="add">Nouvelle ligne</option>
+                  <option value="replace-bonus">Recommencer la ligne + bonus</option>
+                  <option value="replace">Recommencer la ligne</option>
+                </select>
+              </label>
+            </div>
+          </article>
+
+          <article class="menu-card menu-card--step menu-card--wizard-hidden" data-setup-step="2" hidden>
+            <h3 class="menu-card__title">
+              <span class="menu-card__step" aria-hidden="true">2</span> Taille du mot
+            </h3>
+            <p class="menu-card__hint">Vous avez autant d’essais que de lettres (ex. 6 lettres → 6 essais).</p>
+            <div class="length-picker" id="length-picker" role="radiogroup" aria-label="Nombre de lettres"></div>
+          </article>
+
+          <article class="menu-card menu-card--step menu-card--wizard-hidden" data-setup-step="3" hidden>
+            <h3 class="menu-card__title">
+              <span class="menu-card__step" aria-hidden="true">3</span> Combien de mots ?
+            </h3>
+            <label class="menu-field menu-field--compact" for="words-per-session">
+              <span class="menu-field-label">Durée de la session</span>
+              <select id="words-per-session" class="menu-select">
+                <option value="8" selected>8 mots — partie courte</option>
+                <option value="10">10 mots</option>
+                <option value="12">12 mots</option>
+                <option value="15">15 mots</option>
+                <option value="0">Sans limite</option>
+              </select>
+            </label>
+          </article>
+
+          <article class="menu-card menu-card--step menu-card--wizard-hidden" data-setup-step="4" hidden>
+            <h3 class="menu-card__title">
+              <span class="menu-card__step" aria-hidden="true">4</span> Avec ou sans chrono ?
+            </h3>
+            <label class="menu-field menu-field--checkbox" for="turn-timer-enabled">
+              <input type="checkbox" id="turn-timer-enabled" />
+              <span>Activer le chrono</span>
+            </label>
+            <label class="menu-field" for="turn-timer-seconds">
+              <span class="menu-field-label">Temps par tour</span>
+              <select id="turn-timer-seconds" class="menu-select" disabled>
+                <option value="8" selected>8 secondes</option>
+                <option value="10">10 secondes</option>
+                <option value="15">15 secondes</option>
+                <option value="20">20 secondes</option>
+                <option value="30">30 secondes</option>
+              </select>
+            </label>
+          </article>
         </div>
 
-        <div id="team-options" class="team-options hidden" aria-hidden="true">
-          <h2>Équipes</h2>
-          <div class="team-size-picker" id="team-size-picker" role="radiogroup" aria-label="Nombre d'équipes"></div>
-
-          <h2 class="team-options-sub">Comportement après une erreur</h2>
-          <label class="menu-field" for="team-error-behavior">
-            <span class="menu-field-label">Essai perdu (mot invalide, incomplet…)</span>
-            <select id="team-error-behavior" class="menu-select">
-              <option value="replace-bonus">Remplacer la ligne + lettre bonus</option>
-              <option value="replace">Remplacer la ligne</option>
-              <option value="add-bonus">Ajouter une ligne + lettre bonus</option>
-              <option value="add">Ajouter une ligne</option>
-            </select>
-          </label>
-
-          <p class="hint team-hint">
-            Chaque équipe a son score et sa grille de chiffres. Les équipes se relaient à chaque essai validé.
-          </p>
-        </div>
-
-        <h2>Chrono</h2>
-        <label class="menu-field menu-field--checkbox" for="turn-timer-enabled">
-          <input type="checkbox" id="turn-timer-enabled" />
-          <span>Activer le chrono par tour</span>
-        </label>
-        <label class="menu-field" for="turn-timer-seconds">
-          <span class="menu-field-label">Durée par tour</span>
-          <select id="turn-timer-seconds" class="menu-select" disabled>
-            <option value="8" selected>8 secondes</option>
-            <option value="10">10 secondes</option>
-            <option value="15">15 secondes</option>
-            <option value="20">20 secondes</option>
-            <option value="30">30 secondes</option>
-          </select>
-        </label>
-        <p class="hint timer-hint">
-          Temps écoulé : passage à l’équipe suivante (équipe) ou essai perdu (solo).
-        </p>
-
-        <h2>Partie</h2>
-        <label class="menu-field" for="words-per-session">
-          <span class="menu-field-label">Nombre de mots à jouer</span>
-          <select id="words-per-session" class="menu-select">
-            <option value="8">8 mots</option>
-            <option value="10">10 mots</option>
-            <option value="12">12 mots</option>
-            <option value="15">15 mots</option>
-            <option value="0" selected>Illimité</option>
-          </select>
-        </label>
-        <p class="hint words-session-hint">
-          Chaque mot compte (trouvé ou non). À la fin du quota, récapitulatif puis retour possible au menu.
-        </p>
-
-        <h2>Nombre de lettres</h2>
-        <div class="length-picker" id="length-picker"></div>
-        <button type="button" class="btn btn-primary" id="btn-play">Jouer</button>
-        <p id="menu-loading-status" class="hint menu-loading-status hidden" role="status" aria-live="polite"></p>
+        <footer class="menu-setup-footer">
+          <div class="menu-setup-nav">
+            <button type="button" class="btn btn-ghost menu-setup-prev hidden" id="menu-setup-prev">
+              Précédent
+            </button>
+            <button type="button" class="btn btn-primary" id="menu-setup-next">Suivant</button>
+            <button type="button" class="btn btn-primary btn-launch hidden" id="btn-play">Lancer la partie</button>
+          </div>
+          <p id="menu-loading-status" class="hint menu-loading-status hidden" role="status" aria-live="polite"></p>
+          <button type="button" class="link-btn menu-setup-rules menu-setup-rules--wizard-hidden hidden" id="menu-setup-rules">
+            Rappel des règles
+          </button>
+        </footer>
       </section>
 
       <section id="game" class="panel hidden">
@@ -333,7 +368,10 @@
             </p>
             <ul class="rules-list">
               <li><strong>+50 points</strong> — mot trouvé (sauf dernier mot de la partie).</li>
-              <li><strong>+100 points</strong> — mot trouvé sur le <strong>dernier mot</strong> du quota.</li>
+              <li>
+                <strong>+100 points</strong> — pour l’équipe qui trouve le <strong>dernier mot de la partie</strong>
+                (en solo : le joueur).
+              </li>
               <li><strong>+100 points</strong> — une ligne, colonne ou diagonale complète sur le plateau (alignement «&nbsp;Motus&nbsp;»).</li>
               <li><strong>Boule noire</strong> — la main passe à l’équipe suivante (mode équipe).</li>
             </ul>
