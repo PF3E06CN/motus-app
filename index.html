@@ -1,0 +1,366 @@
+<!DOCTYPE html>
+<html lang="fr">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Motus — Jeu des mots</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,600;0,9..40,700;1,9..40,400&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="./src/styles.css" />
+  </head>
+  <body>
+    <!-- Sons : chemins relatifs au document (Vite sert `public/sounds/` → `./sounds/…`). -->
+    <div class="sr-only" aria-hidden="true">
+      <audio id="motus-snd-correct" preload="auto" playsinline src="./public/sounds/verify-correct.mp3"></audio>
+      <audio id="motus-snd-wrong" preload="auto" playsinline src="./public/sounds/verify-wrong.mp3"></audio>
+      <audio id="motus-snd-missing" preload="auto" playsinline src="./public/sounds/verify-missing.mp3"></audio>
+      <audio id="motus-snd-invalid" preload="auto" playsinline src="./public/sounds/word-invalid.mp3"></audio>
+      <audio id="motus-snd-win" preload="auto" playsinline src="./public/sounds/word-win.mp3"></audio>
+      <audio
+        id="motus-snd-plateau-reveal"
+        preload="auto"
+        playsinline
+        src="./public/sounds/Retournement-Chiffre.mp3"
+      ></audio>
+      <audio
+        id="motus-snd-plateau-hide"
+        preload="auto"
+        playsinline
+        src="./public/sounds/Retournement-Chiffre.mp3"
+      ></audio>
+      <audio
+        id="motus-snd-plateau-flip"
+        preload="auto"
+        playsinline
+        src="./public/sounds/Tirrage-Chiffre.mp3"
+      ></audio>
+      <audio id="motus-snd-plateau-motus" preload="auto" playsinline src="./public/sounds/Motus.mp3"></audio>
+      <audio
+        id="motus-snd-plateau-black"
+        preload="auto"
+        playsinline
+        src="./public/sounds/BouleNoire.mp3"
+      ></audio>
+      <audio
+        id="motus-snd-generique"
+        preload="auto"
+        playsinline
+        loop
+        src="./public/sounds/generique.mp3"
+      ></audio>
+    </div>
+    <audio id="motus-snd-cast-voice" preload="auto" playsinline></audio>
+    <audio id="motus-snd-cast-t" preload="auto" playsinline src="./public/sounds/t.mp3"></audio>
+    <audio id="motus-snd-cast-23" preload="auto" playsinline src="./public/sounds/23.mp3"></audio>
+    <audio id="motus-snd-cast-51" preload="auto" playsinline src="./public/sounds/51.mp3"></audio>
+    <div id="app">
+      <header class="header">
+        <h1 class="logo">
+          <img
+            class="logo-img"
+            src="Images/motus-logo.png"
+            width="445"
+            height="100"
+            alt="Motus"
+          />
+        </h1>
+      </header>
+
+      <nav class="app-nav" aria-label="Navigation principale">
+        <button type="button" class="nav-tab active" data-nav="play" id="nav-play">Jouer</button>
+        <button type="button" class="nav-tab" data-nav="aide" id="nav-aide">Aide</button>
+        <button type="button" class="nav-tab" data-nav="settings" id="nav-settings">Paramètres</button>
+        <button type="button" class="nav-tab" data-nav="credits" id="nav-credits">Crédits</button>
+        <button type="button" class="nav-tab" data-nav="debug" id="nav-debug">Debug</button>
+      </nav>
+
+      <section id="menu" class="panel hidden">
+        <h2>Nombre de lettres</h2>
+        <div class="length-picker" id="length-picker"></div>
+        <button type="button" class="btn btn-primary" id="btn-play">Jouer</button>
+        <p id="menu-loading-status" class="hint menu-loading-status hidden" role="status" aria-live="polite"></p>
+        <p class="hint">
+          1re lettre dans la grille : tapez-la pour avancer, puis épellez le mot · Entrée valider
+        </p>
+      </section>
+
+      <section id="game" class="panel hidden">
+        <div class="game-top">
+          <button type="button" class="btn btn-ghost" id="btn-menu" aria-label="Menu">☰</button>
+          <div
+            id="motus-score-group"
+            class="motus-score"
+            role="group"
+            aria-label="Score plateau : 0 points"
+          >
+            <span class="motus-score-label">Pts</span>
+            <div class="motus-score-cells">
+              <span class="motus-score-cell" id="motus-score-d0">0</span>
+              <span class="motus-score-cell" id="motus-score-d1">0</span>
+              <span class="motus-score-cell" id="motus-score-d2">0</span>
+            </div>
+          </div>
+          <span class="attempts-label" id="attempts-label"></span>
+          <button type="button" class="btn btn-ghost" id="btn-new" title="Nouveau mot">↻</button>
+        </div>
+
+        <div id="ball-draw" class="ball-draw win-ball-draw hidden" aria-live="polite">
+          <p class="ball-draw-title">Grille Motus</p>
+          <p id="ball-win-summary" class="ball-win-summary"></p>
+          <div id="ball-motus-grid" class="ball-motus-grid" role="grid" aria-label="Grille 5 par 5 des numéros"></div>
+          <p class="ball-draw-urn">Urn : 17 numéros de la grille + 3 boules noires · brassage avant chaque tir</p>
+          <div class="win-ball-slots">
+            <div class="win-ball-slot" id="win-ball-slot-0">
+              <div class="win-ball-mini" id="win-ball-mini-0">
+                <span class="win-ball-char" id="win-ball-char-0">?</span>
+              </div>
+            </div>
+            <div class="win-ball-slot" id="win-ball-slot-1">
+              <div class="win-ball-mini" id="win-ball-mini-1">
+                <span class="win-ball-char" id="win-ball-char-1">?</span>
+              </div>
+            </div>
+          </div>
+          <p id="ball-draw-hint" class="ball-draw-hint"></p>
+          <button type="button" class="btn btn-primary" id="btn-win-continue">Continuer</button>
+        </div>
+
+        <div id="grid" class="grid" role="grid" aria-label="Grille Motus"></div>
+
+        <div id="typing-indicator" class="typing-indicator" aria-live="polite"></div>
+
+        <div id="message" class="message" role="status"></div>
+
+        <div id="keyboard" class="keyboard" aria-label="Clavier AZERTY"></div>
+
+        <div class="game-actions">
+          <button type="button" class="btn btn-secondary" id="btn-submit">Valider</button>
+          <button type="button" class="btn btn-secondary" id="btn-delete">Effacer</button>
+        </div>
+      </section>
+
+      <section id="modal" class="modal hidden" role="dialog" aria-modal="true">
+        <div class="modal-card">
+          <h2 id="modal-title"></h2>
+          <p id="modal-word" class="modal-word"></p>
+          <button type="button" class="btn btn-primary" id="btn-modal-close">Continuer</button>
+        </div>
+      </section>
+
+      <!-- Panneaux type motusJS (Aide / Paramètres / Crédits) -->
+      <section id="overlay-aide" class="app-overlay hidden" aria-hidden="true">
+        <div class="app-overlay-backdrop" data-close-overlay tabindex="-1"></div>
+        <div class="app-overlay-card" role="document">
+          <div class="app-overlay-top">
+            <button type="button" class="btn-overlay-back" data-close-overlay aria-label="Retour">🡰</button>
+            <h2 class="app-overlay-title">Aide</h2>
+          </div>
+          <div class="app-overlay-body">
+            <p><strong>But.</strong> Devinez le mot en un nombre d’essais limité (égal au nombre de lettres).</p>
+            <p>
+              <strong>Grille Motus (plateau).</strong> Dès le début de la partie, la <strong>grille 5 × 5</strong> se
+              présente comme à l’émission : <strong>25 numéros</strong> dans l’ordre
+              <strong>gauche → droite, haut → bas</strong>, puis <strong>8 cases</strong> repassent
+              <strong>face cachée</strong> (au plus <strong>2 par ligne, colonne ou diagonale</strong>, au moins 1).
+              Vous jouez alors le <strong>premier mot</strong> sans tirage de boule : la grille des chiffres se replie
+              pour laisser la <strong>grille de lettres</strong>. Après une
+              <strong>victoire</strong>, tirage(s) dans l’<strong>urne</strong> (17 numéros encore visibles +
+              <strong>3 boules noires</strong>) : si la <strong>première boule n’est pas noire</strong>, un
+              <strong>second tirage</strong> a lieu ; si la <strong>première est noire</strong>, il n’y a
+              <strong>pas de second tirage</strong> (la main passe). Les boules tirées ne reviennent pas dans l’urne
+              tant que le plateau n’est pas réinitialisé (Motus ou menu).
+            </p>
+            <p>
+              <strong>Première lettre.</strong> Elle est donnée : tapez-la au clavier pour valider la case, puis
+              épellez le reste du mot.
+            </p>
+            <p>
+              <strong>Couleurs.</strong> Rouge = bien placé · jaune = mal placé (présente ailleurs) · bleu = absente
+              du mot.
+            </p>
+            <p>
+              <strong>Validation.</strong> Bouton « Valider » ou touche <kbd>Entrée</kbd>. Mot incomplet, inconnu ou règle
+              non respectée = essai perdu.
+            </p>
+            <p>
+              <strong>Clavier.</strong> AZERTY à l’écran ou clavier physique · <kbd>←</kbd> <kbd>→</kbd> déplacent le
+              curseur · <kbd>Retour arrière</kbd> efface.
+            </p>
+          </div>
+        </div>
+      </section>
+
+      <section id="overlay-settings" class="app-overlay hidden" aria-hidden="true">
+        <div class="app-overlay-backdrop" data-close-overlay tabindex="-1"></div>
+        <div class="app-overlay-card" role="document">
+          <div class="app-overlay-top">
+            <button type="button" class="btn-overlay-back" data-close-overlay aria-label="Retour">🡰</button>
+            <h2 class="app-overlay-title">Paramètres</h2>
+          </div>
+          <div class="app-overlay-body">
+            <p>
+              <strong>Longueur du mot.</strong> Choisissez un nombre de lettres (5 à 10) sur l’onglet
+              <strong>Jouer</strong>, puis lancez une partie. Le changement s’applique au prochain mot.
+            </p>
+            <p>
+              <strong>Sons.</strong> Des fichiers audio dans <code>public/sounds/</code> (MP3 recommandés) ; un clic
+              sur « Jouer » débloque la lecture sur mobile.
+            </p>
+            <p class="app-overlay-muted">Clavier fixe AZERTY (non modifiable dans cette version).</p>
+          </div>
+        </div>
+      </section>
+
+      <section id="overlay-credits" class="app-overlay hidden" aria-hidden="true">
+        <div class="app-overlay-backdrop" data-close-overlay tabindex="-1"></div>
+        <div class="app-overlay-card" role="document">
+          <div class="app-overlay-top">
+            <button type="button" class="btn-overlay-back" data-close-overlay aria-label="Retour">🡰</button>
+            <h2 class="app-overlay-title">Crédits</h2>
+          </div>
+          <div class="app-overlay-body">
+            <h3 class="app-overlay-h3">Motus</h3>
+            <p>
+              Le jeu <em>Motus</em> est une propriété de
+              <a href="https://www.francetelevisions.fr/" target="_blank" rel="noopener noreferrer"
+                >France Télévisions</a
+              >
+              / IDTV.
+            </p>
+            <h3 class="app-overlay-h3">Dictionnaires</h3>
+            <p>
+              Les listes de mots utilisées en ligne proviennent du dépôt
+              <a
+                href="https://github.com/difabiolorenzo/motusJS"
+                target="_blank"
+                rel="noopener noreferrer"
+                >motusJS</a
+              >
+              (difabiolorenzo), en complément d’un jeu de secours local.
+            </p>
+            <h3 class="app-overlay-h3">Interface</h3>
+            <p>
+              Barre de navigation et idée de volets inspirées de
+              <a
+                href="https://difabiolorenzo.github.io/motusJS/"
+                target="_blank"
+                rel="noopener noreferrer"
+                >motusJS en ligne</a
+              >.
+            </p>
+          </div>
+        </div>
+      </section>
+
+      <section id="overlay-debug" class="app-overlay hidden" aria-hidden="true">
+        <div class="app-overlay-backdrop" data-close-overlay tabindex="-1"></div>
+        <div class="app-overlay-card app-overlay-card--wide" role="document">
+          <div class="app-overlay-top">
+            <button type="button" class="btn-overlay-back" data-close-overlay aria-label="Retour">🡰</button>
+            <h2 class="app-overlay-title">Debug</h2>
+          </div>
+          <div class="app-overlay-body">
+            <p class="app-overlay-muted">
+              Outils de développement (comme sur
+              <a href="https://difabiolorenzo.github.io/motusJS/" target="_blank" rel="noopener noreferrer">motusJS</a
+              >). À n’utiliser qu’en local ou pour tester.
+            </p>
+
+            <h3 class="app-overlay-h3">Partie</h3>
+            <p id="debug-state-line" class="debug-readout">—</p>
+            <div class="debug-actions">
+              <button type="button" class="btn btn-secondary btn-debug" id="debug-refresh-state">Actualiser</button>
+              <button type="button" class="btn btn-secondary btn-debug" id="debug-new-word">Nouveau mot</button>
+            </div>
+
+            <h3 class="app-overlay-h3">Mot mystère (triche)</h3>
+            <p>
+              Visible uniquement pendant une partie en cours (hors chargement). En dev local, le mot est aussi envoyé
+              au fichier <code>reponse</code> via le serveur Vite / <code>dev_server.py</code>.
+            </p>
+            <p class="debug-target-row">
+              <code id="debug-target-word" class="debug-target">—</code>
+              <button type="button" class="btn btn-secondary btn-debug" id="debug-copy-target">Copier</button>
+            </p>
+
+            <h3 class="app-overlay-h3">Sons</h3>
+            <p class="debug-readout">Échantillon par fichier (<code>public/sounds/</code>) :</p>
+            <div class="debug-actions">
+              <button type="button" class="btn btn-secondary btn-debug" id="debug-snd-sample-correct">
+                Bien placé
+              </button>
+              <button type="button" class="btn btn-secondary btn-debug" id="debug-snd-sample-wrong">
+                Mal placé
+              </button>
+              <button type="button" class="btn btn-secondary btn-debug" id="debug-snd-sample-missing">
+                Absente
+              </button>
+              <button type="button" class="btn btn-secondary btn-debug" id="debug-snd-sample-invalid">
+                Mot invalide
+              </button>
+              <button type="button" class="btn btn-secondary btn-debug" id="debug-snd-sample-win">
+                Victoire
+              </button>
+            </div>
+            <p class="debug-readout">
+              Habillage grille (<code>Tirrage-Chiffre</code>, <code>Retournement-Chiffre</code>, <code>Motus</code>,
+              <code>BouleNoire</code> — pas les voix 1–70) :
+            </p>
+            <div class="debug-actions">
+              <button type="button" class="btn btn-secondary btn-debug" id="debug-snd-grid-prime">
+                Précharger effets plateau
+              </button>
+              <button type="button" class="btn btn-secondary btn-debug" id="debug-snd-grid-reveal">
+                Tirage chiffre (intro)
+              </button>
+              <button type="button" class="btn btn-secondary btn-debug" id="debug-snd-grid-hide">
+                Masquer 8 — Retournement-Chiffre
+              </button>
+              <button type="button" class="btn btn-secondary btn-debug" id="debug-snd-grid-flip">
+                Retournement chiffre
+              </button>
+              <button type="button" class="btn btn-secondary btn-debug" id="debug-snd-grid-motus">Motus</button>
+              <button type="button" class="btn btn-secondary btn-debug" id="debug-snd-grid-black">Boule noire</button>
+            </div>
+            <p class="debug-readout">Voix cast :</p>
+            <div class="debug-actions">
+              <button type="button" class="btn btn-secondary btn-debug" id="debug-snd-cast-letter">
+                Lettre « t »
+              </button>
+              <button type="button" class="btn btn-secondary btn-debug" id="debug-snd-cast-number">
+                Chiffre « 23 »
+              </button>
+              <button type="button" class="btn btn-secondary btn-debug" id="debug-snd-cast-3">
+                Chiffre « 3 »
+              </button>
+              <button type="button" class="btn btn-secondary btn-debug" id="debug-snd-cast-51">
+                Chiffre « 51 » (voix)
+              </button>
+            </div>
+            <p class="debug-readout">Utilitaires :</p>
+            <div class="debug-actions">
+              <button type="button" class="btn btn-secondary btn-debug" id="debug-snd-synth">
+                Bip test (Web Audio)
+              </button>
+              <button type="button" class="btn btn-secondary btn-debug" id="debug-snd-prime">Précharger audio</button>
+              <button type="button" class="btn btn-secondary btn-debug" id="debug-snd-buzz">Buzz erreur</button>
+              <button type="button" class="btn btn-secondary btn-debug" id="debug-snd-verify">Séquence test</button>
+              <button type="button" class="btn btn-secondary btn-debug" id="debug-snd-win">Fanfare</button>
+            </div>
+
+            <h3 class="app-overlay-h3">Console</h3>
+            <p>
+              Après avoir lancé une partie, l’instance courante est exposée sous
+              <code>window.__MOTUS__</code> (ex. <code>__MOTUS__.target</code>, <code>__MOTUS__.verifySet</code>).
+            </p>
+          </div>
+        </div>
+      </section>
+    </div>
+    <script type="module" src="./src/main.js"></script>
+  </body>
+</html>
