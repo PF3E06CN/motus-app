@@ -2,8 +2,10 @@ import { evaluateGuess } from './evaluate.js';
 import { isValidWord, loadDictionaries, pickRandomWord } from './dictionary.js';
 import { writeReponseFile } from './dev-reponse.js';
 import {
+  isSafariBrowser,
   playErrorBuzz,
   playVerifyLetterSound,
+  playVerifySequence,
   playWinFanfare,
   unlockAudioSync,
   warmVerifyAudio,
@@ -317,7 +319,8 @@ export class MotusGame {
     this.inputLocked = true;
     try {
       await warmVerifyAudio();
-      for (let i = 0; i < this.length; i++) {
+
+      const applyLetterResult = (i) => {
         row.states[i] = results[i];
         if (results[i] === 'correct') {
           this.placement[i] = 'correct';
@@ -326,11 +329,22 @@ export class MotusGame {
           this.absentLetters.add(guess[i]);
         }
         this.emit();
-        await playVerifyLetterSound(results[i], {
-          index: i,
-          wordLen: this.length,
+      };
+
+      if (isSafariBrowser()) {
+        await playVerifySequence(results, {
           isWin: won,
+          onLetter: (i) => applyLetterResult(i),
         }).catch(() => {});
+      } else {
+        for (let i = 0; i < this.length; i++) {
+          applyLetterResult(i);
+          await playVerifyLetterSound(results[i], {
+            index: i,
+            wordLen: this.length,
+            isWin: won,
+          }).catch(() => {});
+        }
       }
 
       if (won) {

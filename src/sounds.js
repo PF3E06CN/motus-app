@@ -739,19 +739,19 @@ async function playBufferOnce(ctx, buf) {
   stopActiveSafariVerifyWebSource();
   await new Promise((resolve) => {
     let settled = false;
-    const finish = () => {
-      if (settled) return;
-      settled = true;
-      if (activeSafariVerifySource === src) activeSafariVerifySource = null;
-      resolve();
-    };
     const src = ctx.createBufferSource();
     const gain = ctx.createGain();
     gain.gain.value = 1;
     src.buffer = buf;
     src.connect(gain);
     gain.connect(ctx.destination);
-    const t0 = ctx.currentTime + 0.008;
+    const finish = () => {
+      if (settled) return;
+      settled = true;
+      if (activeSafariVerifySource === src) activeSafariVerifySource = null;
+      resolve();
+    };
+    const t0 = ctx.currentTime + 0.012;
     activeSafariVerifySource = src;
     src.onended = finish;
     try {
@@ -760,7 +760,8 @@ async function playBufferOnce(ctx, buf) {
       finish();
       return;
     }
-    window.setTimeout(finish, Math.ceil(buf.duration * 1000) + 400);
+    /* Secours uniquement si `ended` ne vient pas (évite de couper la piste sur Safari). */
+    window.setTimeout(finish, Math.ceil(buf.duration * 1000) + 900);
   });
 }
 
@@ -1041,25 +1042,80 @@ export async function playVerifyLetterSound(outcome, opts = {}) {
   }
 }
 
+const VERIFY_SEQUENCE_GAP_SEC = 0.07;
+
+/**
+ * Safari : une seule timeline Web Audio (buffers déjà en RAM) — évite stop/start + jank UI.
+ * @param {string[]} results
+ * @param {{ isWin?: boolean, onLetter?: (index: number, outcome: string) => void }} [opts]
+ */
+async function playSafariVerifySequenceScheduled(results, opts = {}) {
+  const { onLetter } = opts;
+  if (!results.length) return;
+  await warmVerifyAudio();
+  const ctx = getCtx();
+  if (!ctx) return;
+  await ensureRunning(ctx);
+  stopActiveSafariVerifyWebSource();
+
+  let t = ctx.currentTime + 0.04;
+  let endT = t;
+  const cues = [];
+
+  for (let i = 0; i < results.length; i++) {
+    const outcome = results[i];
+    if (outcome !== 'correct' && outcome !== 'wrong' && outcome !== 'missing') continue;
+    const buf = roleBuffers.get(outcome);
+    if (!isUsableDecodedBuffer(buf)) continue;
+
+    const startAt = t;
+    cues.push({ i, outcome, startAt, buf });
+
+    const src = ctx.createBufferSource();
+    const gain = ctx.createGain();
+    gain.gain.value = 1;
+    src.buffer = buf;
+    src.connect(gain);
+    gain.connect(ctx.destination);
+    src.start(startAt);
+
+    t += buf.duration + VERIFY_SEQUENCE_GAP_SEC;
+    endT = startAt + buf.duration;
+  }
+
+  const base = ctx.currentTime;
+  for (const { i, outcome, startAt } of cues) {
+    if (onLetter) {
+      const ms = Math.max(0, (startAt - base) * 1000);
+      window.setTimeout(() => onLetter(i, outcome), ms);
+    }
+  }
+
+  const waitMs = Math.max(0, (endT - ctx.currentTime) * 1000) + 120;
+  await delay(waitMs);
+}
+
 /**
  * Enchaîne les sons de validation dans l’ordre des cases (gauche → droite).
  * @param {string[]} results
- * @param {{ isWin?: boolean }} [opts]
+ * @param {{ isWin?: boolean, onLetter?: (index: number, outcome: string) => void }} [opts]
  */
 export async function playVerifySequence(results, opts = {}) {
-  const { isWin = false } = opts;
+  const { isWin = false, onLetter } = opts;
   if (!results.length) return;
   unlockAudioSync();
-  const ctx = getCtx();
-  if (ctx) {
-    await ensureRunning(ctx);
-    if (isSafariBrowser()) {
-      await warmVerifyAudio().catch(() => {});
-    }
+
+  if (isSafariBrowser()) {
+    await playSafariVerifySequenceScheduled(results, { isWin, onLetter });
+    return;
   }
+
+  const ctx = getCtx();
+  if (ctx) await ensureRunning(ctx);
   for (let i = 0; i < results.length; i++) {
     const o = results[i];
     if (o !== 'correct' && o !== 'wrong' && o !== 'missing') continue;
+    if (onLetter) onLetter(i, o);
     await playVerifyLetterSound(o, { index: i, wordLen: results.length, isWin });
   }
 }
