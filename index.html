@@ -123,16 +123,24 @@
         <button type="button" class="nav-tab" data-nav="aide" id="nav-aide">Règles</button>
         <button type="button" class="nav-tab" data-nav="settings" id="nav-settings">Audio</button>
         <button type="button" class="nav-tab" data-nav="credits" id="nav-credits">Crédits</button>
-        <button type="button" class="nav-tab" data-nav="debug" id="nav-debug">Debug</button>
+        <button type="button" class="nav-tab hidden" data-nav="debug" id="nav-debug" hidden>Debug</button>
       </nav>
 
       <section
         id="pwa-install-hint"
         class="panel pwa-install-hint"
-        aria-labelledby="pwa-install-title"
+        aria-labelledby="pwa-install-kicker"
       >
-        <h2 id="pwa-install-title" class="pwa-install-hint__title">Installer Motus sur votre téléphone</h2>
-        <p class="pwa-install-hint__lead">Accès direct depuis votre écran d’accueil.</p>
+        <p id="pwa-install-kicker" class="pwa-install-hint__kicker">
+          Astuce&nbsp;: installer Motus sur votre téléphone
+        </p>
+        <div class="pwa-install-hint__homescreen" aria-hidden="true">
+          <div class="pwa-install-hint__app-icon">
+            <img src="./favicon.png" width="60" height="60" alt="" />
+          </div>
+          <span class="pwa-install-hint__app-name">Motus</span>
+        </div>
+        <p class="pwa-install-hint__lead">Comme une application sur votre écran d’accueil.</p>
         <div class="pwa-install-hint__grid">
           <article class="pwa-install-hint__card">
             <h3 class="pwa-install-hint__platform">iPhone / iPad</h3>
@@ -167,7 +175,6 @@
           </article>
         </div>
         <div class="pwa-install-hint__actions">
-          <button type="button" class="btn btn-primary" id="pwa-install-hint-go">Nouvelle partie</button>
           <button type="button" class="link-btn pwa-install-hint__dismiss" id="pwa-install-hint-dismiss">
             Ne plus afficher
           </button>

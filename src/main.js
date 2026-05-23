@@ -1237,9 +1237,6 @@ function initMenu() {
   $('#nav-play').addEventListener('click', () => {
     goToPlayMenu();
   });
-  $('#pwa-install-hint-go')?.addEventListener('click', () => {
-    goToPlayMenu();
-  });
   $('#pwa-install-hint-dismiss')?.addEventListener('click', () => {
     try {
       localStorage.setItem(PWA_HINT_DISMISS_KEY, '1');
