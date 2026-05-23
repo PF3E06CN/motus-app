@@ -1,3 +1,4 @@
+import { initGeneriqueIntro, replayGeneriqueIntro } from './intro-generique.js';
 import {
   announceWordGridFromTarget,
   playCastDrawNumber,
@@ -248,6 +249,11 @@ function scheduleCastLetterOnGesture() {
   gamePanel.addEventListener('pointerdown', onGesture, { once: true, passive: true });
 }
 
+function isGeneriqueOverlayVisible() {
+  const el = document.getElementById('generique-overlay');
+  return el instanceof HTMLElement && !el.hidden;
+}
+
 function pauseMenuGenerique() {
   const el = document.getElementById('motus-snd-generique');
   if (!el || !(el instanceof HTMLAudioElement)) return;
@@ -300,6 +306,12 @@ function tryStartMenuGeneriqueMutedAutoplay() {
   if (!el || !(el instanceof HTMLAudioElement)) return;
   if (!el.paused && !el.muted) return;
   if (!el.paused && el.muted && menuGeneriqueAwaitingGestureUnmute) return;
+  if (el.currentTime > 0.5 && !el.paused) {
+    el.muted = false;
+    menuGeneriqueAwaitingGestureUnmute = false;
+    el.loop = true;
+    return;
+  }
   el.loop = true;
   el.volume = MENU_GENERIQUE_VOL;
   el.muted = true;
@@ -319,6 +331,8 @@ function tryStartMenuGeneriqueMutedAutoplay() {
         el.muted = false;
         return;
       }
+      if (isGeneriqueOverlayVisible()) return;
+      if (!el.paused && !el.muted) return;
       menuGeneriqueAwaitingGestureUnmute = true;
     })
     .catch(() => {
@@ -355,20 +369,45 @@ function syncMenuGenerique() {
   unlockAudioSync();
   if (menuGeneriqueAwaitingGestureUnmute) {
     menuGeneriqueAwaitingGestureUnmute = false;
+    const resumeFromStart = el.muted || el.paused;
     el.muted = false;
-    try {
-      el.currentTime = 0;
-    } catch {
-      /* ignore */
+    if (resumeFromStart) {
+      try {
+        el.currentTime = 0;
+      } catch {
+        /* ignore */
+      }
     }
   }
   el.loop = true;
   el.volume = MENU_GENERIQUE_VOL;
   el.muted = false;
-  if (el.paused) {
+  if (el.paused || el.ended) {
     const p = el.play();
     if (p !== undefined) void p.catch(() => {});
   }
+}
+
+/** Fin du générique : la piste continue en boucle sur le menu (sans repartir de zéro). */
+function handoffGeneriqueToMenuMusic() {
+  const el = document.getElementById('motus-snd-generique');
+  if (!el || !(el instanceof HTMLAudioElement)) return;
+  if (!isMusicEnabled()) {
+    pauseMenuGenerique();
+    el.muted = true;
+    return;
+  }
+  if (!gamePanel.classList.contains('hidden')) {
+    pauseMenuGenerique();
+    return;
+  }
+  menuGeneriqueAwaitingGestureUnmute = false;
+  unlockAudioSync();
+  el.loop = true;
+  el.volume = MENU_GENERIQUE_VOL;
+  el.muted = false;
+  const p = el.play();
+  if (p !== undefined) void p.catch(() => {});
 }
 
 /** Retour menu depuis une partie : générique repart du début. */
@@ -1164,6 +1203,21 @@ function initMenu() {
   $('#debug-snd-win').addEventListener('click', () => {
     unlockAudioSync();
     void playWinFanfare().catch(() => {});
+  });
+
+  $('#debug-replay-generique')?.addEventListener('click', () => {
+    closeAllOverlays();
+    unlockAudioSync();
+    void replayGeneriqueIntro({
+      pauseMenuGenerique,
+      syncMenuGenerique,
+      handoffGeneriqueToMenuMusic,
+      menuVolume: MENU_GENERIQUE_VOL,
+      force: true,
+    }).then((result) => {
+      if (result?.withAudio) handoffGeneriqueToMenuMusic();
+      else scheduleInitialMenuGenerique();
+    });
   });
 
   $('#debug-snd-grid-prime').addEventListener('click', () => {
@@ -2318,6 +2372,7 @@ let lastMenuAudioUiAt = 0;
 
 function bindMenuGeneriqueListener() {
   const onUserActivateAudio = () => {
+    if (isGeneriqueOverlayVisible()) return;
     if (!gamePanel.classList.contains('hidden')) {
       pauseMenuGenerique();
       return;
@@ -2348,5 +2403,13 @@ if (gamePanel && !gamePanel.hasAttribute('tabindex')) {
 }
 bindControls();
 bindMenuGeneriqueListener();
-scheduleInitialMenuGenerique();
+void initGeneriqueIntro({
+  pauseMenuGenerique,
+  syncMenuGenerique,
+  handoffGeneriqueToMenuMusic,
+  menuVolume: MENU_GENERIQUE_VOL,
+}).then((result) => {
+  if (result?.withAudio) handoffGeneriqueToMenuMusic();
+  else scheduleInitialMenuGenerique();
+});
 ensureKeyboardLayoutObserver();

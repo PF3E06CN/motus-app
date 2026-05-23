@@ -1,0 +1,384 @@
+/* Générique Motus 1989 — overlay plein écran */
+
+.generique {
+  position: fixed;
+  inset: 0;
+  z-index: 10000;
+  background: var(--motus-red, #c82400);
+  overflow: hidden;
+}
+
+.generique[hidden] {
+  display: none !important;
+}
+
+.generique__canvas {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+
+.generique__html {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 2;
+}
+
+.generique__credit {
+  position: absolute;
+  right: 8%;
+  bottom: 22%;
+  text-align: left;
+  opacity: 0;
+  transform: translateY(12px);
+  transition:
+    opacity 0.55s ease,
+    transform 0.55s ease;
+}
+
+.generique__credit.is-visible {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+.generique__credit-line {
+  margin: 0;
+  font-family: var(--font-plateau, 'Arial Black', Arial, sans-serif);
+  font-size: clamp(0.75rem, 3.2vw, 1.05rem);
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.92);
+}
+
+.generique__credit-name {
+  margin: 0.35rem 0 0;
+  font-family: var(--font-plateau, 'Arial Black', Arial, sans-serif);
+  font-size: clamp(1.1rem, 5vw, 2rem);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: #fff;
+  text-shadow: 0 2px 12px rgba(0, 0, 0, 0.35);
+}
+
+/* MOTUS unifié — même style que le logo, phases fly → spin → logo */
+
+.generique__motus {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  opacity: 0;
+  visibility: hidden;
+  transition: opacity 0.35s ease, visibility 0.35s ease;
+}
+
+.generique__motus.is-visible {
+  opacity: 1;
+  visibility: visible;
+}
+
+.generique__motus-word {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0;
+}
+
+.generique__motus-part,
+.generique__motus-ball {
+  flex-shrink: 0;
+  opacity: 0;
+  will-change: transform, opacity, left, top, width, height, font-size, filter, scale;
+  transition:
+    transform 0.85s cubic-bezier(0.33, 1, 0.48, 1),
+    opacity 0.45s ease,
+    left 0.85s cubic-bezier(0.33, 1, 0.48, 1),
+    top 0.85s cubic-bezier(0.33, 1, 0.48, 1),
+    right 0.85s cubic-bezier(0.33, 1, 0.48, 1),
+    bottom 0.85s cubic-bezier(0.33, 1, 0.48, 1),
+    width 0.85s cubic-bezier(0.33, 1, 0.48, 1),
+    height 0.85s cubic-bezier(0.33, 1, 0.48, 1),
+    font-size 0.85s cubic-bezier(0.33, 1, 0.48, 1),
+    margin 0.85s cubic-bezier(0.33, 1, 0.48, 1);
+}
+
+/* Lettres métal brossé — face argent clair, extrusion légère, ombre portée */
+.generique__motus-part {
+  font-family: Impact, Haettenschweiler, 'Arial Black', Arial, sans-serif;
+  font-weight: 900;
+  line-height: 0.92;
+  letter-spacing: -0.03em;
+  color: #ffffff;
+  background: linear-gradient(
+    165deg,
+    #ffffff 0%,
+    #ffffff 18%,
+    #f3f3f3 35%,
+    #ffffff 52%,
+    #ececec 68%,
+    #d8d8d8 85%,
+    #c8c8c8 100%
+  );
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  -webkit-text-stroke: 0.35px rgba(255, 255, 255, 0.75);
+  text-shadow: none;
+  filter:
+    drop-shadow(-1px -1px 0 rgba(255, 255, 255, 0.55))
+    drop-shadow(2px 2px 0 #9a9a9a)
+    drop-shadow(3px 3px 0 #707070)
+    drop-shadow(0 8px 14px rgba(0, 0, 0, 0.34));
+}
+
+.generique__motus-ball {
+  border-radius: 50%;
+  background: radial-gradient(
+    circle at 28% 22%,
+    #fffef8 0%,
+    #fff59d 12%,
+    #fde047 32%,
+    #facc15 58%,
+    #eab308 78%,
+    #b45309 100%
+  );
+  box-shadow:
+    inset -7px -11px 16px rgba(100, 65, 0, 0.5),
+    inset 5px 6px 12px rgba(255, 255, 255, 0.55),
+    0 2px 0 rgba(0, 0, 0, 0.35),
+    0 8px 16px rgba(0, 0, 0, 0.48),
+    0 16px 32px rgba(0, 0, 0, 0.38),
+    0 0 28px rgba(250, 204, 21, 0.32);
+  filter:
+    drop-shadow(2px 4px 2px rgba(0, 0, 0, 0.45))
+    drop-shadow(0 14px 24px rgba(0, 0, 0, 0.42));
+  box-sizing: border-box;
+  flex-shrink: 0;
+}
+
+/* ── Layout logo officiel MOTUS (espacement + arc M bas → S haut) ── */
+.generique__motus--fly .generique__motus-word,
+.generique__motus--spin .generique__motus-word,
+.generique__motus--logo .generique__motus-word,
+.generique--static .generique__motus-word {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: clamp(0.08em, 1.4vw, 0.14em);
+  font-size: clamp(2.5rem, 14vw, 5.25rem);
+}
+
+.generique__motus--fly .generique__motus-word {
+  font-size: clamp(2.65rem, 16vw, 6.25rem);
+}
+
+.generique__motus--fly [data-part],
+.generique__motus--spin [data-part],
+.generique__motus--logo [data-part],
+.generique--static [data-part] {
+  position: relative;
+  left: auto;
+  top: auto;
+  right: auto;
+  bottom: auto;
+  margin-left: 0;
+  margin-right: 0;
+}
+
+/* M — incliné à gauche, ancré bas */
+.generique__motus--fly [data-part="m"],
+.generique__motus--spin [data-part="m"],
+.generique__motus--logo [data-part="m"],
+.generique--static [data-part="m"] {
+  transform: rotate(-11deg) translateY(7px);
+  z-index: 1;
+}
+
+/* O — boule entre M et T */
+.generique__motus--fly [data-part="o"],
+.generique__motus--spin [data-part="o"],
+.generique__motus--logo [data-part="o"],
+.generique--static [data-part="o"] {
+  width: 0.56em;
+  height: 0.56em;
+  margin: 0 0.04em;
+  transform: translateY(8px);
+  z-index: 2;
+}
+
+/* T */
+.generique__motus--fly [data-part="t"],
+.generique__motus--spin [data-part="t"],
+.generique__motus--logo [data-part="t"],
+.generique--static [data-part="t"] {
+  transform: rotate(10deg) translateY(2px);
+  z-index: 1;
+}
+
+/* u — minuscule, un peu plus bas */
+.generique__motus--fly [data-part="u"],
+.generique__motus--spin [data-part="u"],
+.generique__motus--logo [data-part="u"],
+.generique--static [data-part="u"] {
+  font-size: 0.84em;
+  transform: rotate(-1deg) translateY(12px);
+}
+
+/* S — plus haut à droite (arc du logo) */
+.generique__motus--fly [data-part="s"],
+.generique__motus--spin [data-part="s"],
+.generique__motus--logo [data-part="s"],
+.generique--static [data-part="s"] {
+  transform: rotate(12deg) translateY(-5px);
+}
+
+.generique__motus--fly [data-part].is-revealed {
+  animation: generique-motus-pop 0.62s cubic-bezier(0.33, 1, 0.68, 1) both;
+}
+
+.generique__motus--fly [data-part="o"].is-revealed {
+  animation: generique-motus-pop-o 0.62s cubic-bezier(0.33, 1, 0.68, 1) both;
+}
+
+.generique__motus--spin [data-part].is-revealed {
+  animation: generique-motus-spin-in 0.9s ease-out forwards;
+}
+
+.generique__motus--logo [data-part] {
+  opacity: 1;
+  animation: none;
+}
+
+@keyframes generique-motus-pop {
+  0% {
+    opacity: 0;
+    scale: 0.88;
+  }
+  50% {
+    opacity: 1;
+    scale: 1.04;
+  }
+  100% {
+    opacity: 1;
+    scale: 1;
+  }
+}
+
+@keyframes generique-motus-pop-o {
+  0% {
+    opacity: 0;
+    scale: 0.88;
+  }
+  50% {
+    opacity: 1;
+    scale: 1.06;
+  }
+  100% {
+    opacity: 1;
+    scale: 1;
+  }
+}
+
+@keyframes generique-motus-spin-in {
+  0% {
+    opacity: 0;
+    scale: 0.25;
+  }
+  100% {
+    opacity: 1;
+    scale: 1;
+  }
+}
+
+.generique__skip {
+  position: absolute;
+  bottom: max(1rem, env(safe-area-inset-bottom));
+  right: max(1rem, env(safe-area-inset-right));
+  z-index: 3;
+  pointer-events: auto;
+  padding: 0.45rem 0.85rem;
+  font-family: var(--font-body, system-ui, sans-serif);
+  font-size: 0.85rem;
+  color: rgba(255, 255, 255, 0.9);
+  background: rgba(0, 0, 0, 0.28);
+  border: 1px solid rgba(255, 255, 255, 0.35);
+  border-radius: 6px;
+  cursor: pointer;
+  opacity: 0;
+  animation: generique-skip-in 0.4s ease 1s forwards;
+}
+
+.generique__skip:hover {
+  background: rgba(0, 0, 0, 0.42);
+}
+
+@keyframes generique-skip-in {
+  to { opacity: 1; }
+}
+
+.generique--static .generique__canvas {
+  display: none;
+}
+
+.generique--static .generique__motus {
+  opacity: 1;
+  visibility: visible;
+}
+
+.generique--static .generique__motus-word {
+  align-items: flex-end;
+}
+
+.generique--static .generique__motus [data-part] {
+  opacity: 1;
+  animation: none;
+}
+
+.generique--fade-out {
+  animation: generique-fade-out 0.55s ease forwards;
+}
+
+@keyframes generique-fade-out {
+  to {
+    opacity: 0;
+    visibility: hidden;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .generique__motus [data-part].is-revealed,
+  .generique__skip {
+    animation: none !important;
+  }
+
+  .generique__motus [data-part] {
+    transition: none;
+  }
+
+  .generique__motus-part {
+    color: #ececec;
+    -webkit-text-fill-color: #ececec;
+    background: none;
+    text-shadow: 0 3px 8px rgba(0, 0, 0, 0.45);
+    filter: none;
+  }
+
+  .generique__motus-ball {
+    filter: none;
+    box-shadow: inset -4px -6px 10px rgba(120, 80, 0, 0.35);
+  }
+
+  .generique__motus--logo [data-part],
+  .generique__motus--spin [data-part].is-revealed {
+    opacity: 1;
+  }
+
+  .generique__credit,
+  .generique__motus {
+    transition: none;
+  }
+}
