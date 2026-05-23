@@ -43,9 +43,12 @@ npm run dev
 
 ## Règles (résumé)
 
-- Première lettre imposée, épeler le mot en entier à chaque essai.
-- Rouge = bien placé · jaune = mal placé · bleu = absente.
-- **Bleu** sur le clavier : lettre absente du mot.
+- Première lettre imposée ; autant d’essais que de lettres ; mot complet à chaque validation.
+- Rouge = bien placé · jaune = mal placé · bleu = absente · clavier bleu foncé = lettre absente.
+- **Solo** ou **équipe** (2–4) : relais à chaque essai ; options après erreur (ligne remplacée / nouvelle ligne, avec ou sans lettre bonus).
+- **Chrono** optionnel par tour ; **quota de mots** (8, 10, 12, 15 ou illimité).
+- Mot trouvé : **+50 pts** (+100 au dernier mot) puis tirage plateau ; ligne Motus : **+100 pts** ; fin de partie = classement par points.
+- Dernier mot (équipe) : tirage seulement si une ligne Motus peut encore faire gagner la partie.
 
 Les dictionnaires sont chargés depuis le dépôt motusJS (connexion Internet requise au premier chargement). Un jeu de secours local est utilisé si le réseau échoue.
 

@@ -4,6 +4,12 @@ import {
   primeCastDrawNumber,
   primeCastLetterAudio,
 } from './cast-sounds.js';
+import {
+  getAudioSettings,
+  isMusicEnabled,
+  loadAudioSettings,
+  setAudioSettings,
+} from './audio-settings.js';
 import { MotusGame, AZERTY_ROWS, AZERTY_KEY_COLUMNS } from './game.js';
 import {
   isIOSDevice,
@@ -251,11 +257,42 @@ function pauseMenuGenerique() {
   }
 }
 
+function syncAudioSettingsToDom() {
+  const s = getAudioSettings();
+  const voicesEl = $('#audio-mute-voices');
+  const musicEl = $('#audio-mute-music');
+  const sfxEl = $('#audio-mute-sfx');
+  if (voicesEl) voicesEl.checked = s.voicesMuted;
+  if (musicEl) musicEl.checked = s.musicMuted;
+  if (sfxEl) sfxEl.checked = s.sfxMuted;
+}
+
+function readAudioSettingsFromDom() {
+  setAudioSettings({
+    voicesMuted: $('#audio-mute-voices')?.checked ?? false,
+    musicMuted: $('#audio-mute-music')?.checked ?? false,
+    sfxMuted: $('#audio-mute-sfx')?.checked ?? false,
+  });
+  applyMusicSetting();
+}
+
+function applyMusicSetting() {
+  const el = document.getElementById('motus-snd-generique');
+  if (!isMusicEnabled()) {
+    pauseMenuGenerique();
+    if (el instanceof HTMLAudioElement) el.muted = true;
+    return;
+  }
+  if (el instanceof HTMLAudioElement) el.muted = false;
+  if (gamePanel.classList.contains('hidden')) syncMenuGenerique();
+}
+
 /**
  * Tente une lecture en sourdine au chargement (politique autoplay : souvent autorisée),
  * puis le son réel au premier {@link syncMenuGenerique} (remise à zéro de la piste seulement à ce passage).
  */
 function tryStartMenuGeneriqueMutedAutoplay() {
+  if (!isMusicEnabled()) return;
   if (!gamePanel.classList.contains('hidden')) return;
   const el = document.getElementById('motus-snd-generique');
   if (!el || !(el instanceof HTMLAudioElement)) return;
@@ -303,6 +340,12 @@ function scheduleInitialMenuGenerique() {
 function syncMenuGenerique() {
   const el = document.getElementById('motus-snd-generique');
   if (!el || !(el instanceof HTMLAudioElement)) return;
+  if (!isMusicEnabled()) {
+    pauseMenuGenerique();
+    el.muted = true;
+    return;
+  }
+  el.muted = false;
   if (!gamePanel.classList.contains('hidden')) {
     pauseMenuGenerique();
     return;
@@ -330,6 +373,11 @@ function syncMenuGenerique() {
 function restartMenuGenerique() {
   const el = document.getElementById('motus-snd-generique');
   if (!el || !(el instanceof HTMLAudioElement)) return;
+  if (!isMusicEnabled()) {
+    pauseMenuGenerique();
+    el.muted = true;
+    return;
+  }
   unlockAudioSync();
   menuGeneriqueAwaitingGestureUnmute = false;
   el.loop = true;
@@ -978,6 +1026,7 @@ function initMenu() {
     openOverlay(overlayAide);
   });
   $('#nav-settings').addEventListener('click', () => {
+    syncAudioSettingsToDom();
     openOverlay(overlaySettings);
   });
   $('#nav-credits').addEventListener('click', () => {
@@ -1105,6 +1154,10 @@ function initMenu() {
   if (wordsPerSessionSelect) {
     wordsPerSessionSelect.addEventListener('change', syncWordsPerSessionMenuField);
     syncWordsPerSessionMenuField();
+  }
+
+  for (const id of ['audio-mute-voices', 'audio-mute-music', 'audio-mute-sfx']) {
+    $(`#${id}`)?.addEventListener('change', readAudioSettingsFromDom);
   }
 
   updateNavHighlight();
@@ -2211,6 +2264,10 @@ function bindMenuGeneriqueListener() {
     document.addEventListener(type, onUserActivateAudio, { capture: true, passive: true });
   }
 }
+
+loadAudioSettings();
+syncAudioSettingsToDom();
+applyMusicSetting();
 
 initMenu();
 if (gamePanel && !gamePanel.hasAttribute('tabindex')) {

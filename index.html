@@ -250,14 +250,17 @@
           </div>
           <div class="app-overlay-body rules-body">
             <p class="rules-lead">
-              Trouvez le <strong>mot mystère</strong>. Vous avez autant d’<strong>essais</strong> que de lettres dans le
-              mot.
+              Trouvez le <strong>mot mystère</strong>. Vous disposez d’autant d’<strong>essais</strong> que de lettres
+              dans le mot. Une partie peut comporter plusieurs mots (réglage <strong>Nombre de mots à jouer</strong> sur
+              l’onglet Jouer).
             </p>
 
+            <h3 class="app-overlay-h3">Grille de lettres</h3>
             <ol class="rules-steps">
-              <li>La <strong>première lettre</strong> est imposée : tapez-la, puis complétez le mot.</li>
-              <li>À chaque essai, proposez le mot <strong>en entier</strong> (même longueur que la grille).</li>
+              <li>La <strong>première lettre</strong> est imposée : complétez le mot lettre par lettre.</li>
+              <li>À chaque essai, le mot doit être <strong>complet</strong> (même longueur que la grille).</li>
               <li>Validez avec <kbd>Entrée</kbd> ou le bouton <strong>Valider</strong>.</li>
+              <li>Les lettres déjà bien placées (rouges) restent sur les essais suivants ; vous pouvez les retaper.</li>
             </ol>
 
             <h3 class="app-overlay-h3">Signification des couleurs</h3>
@@ -295,9 +298,60 @@
               Sur le clavier, les touches <strong>bleu foncé</strong> indiquent les lettres déjà marquées absentes du mot.
             </p>
 
-            <p class="app-overlay-muted rules-note">
-              Mot incomplet, inconnu, <strong>déjà proposé</strong> ou non admis par le dictionnaire : l’essai est
-              perdu.
+            <h3 class="app-overlay-h3">Essai perdu</h3>
+            <p class="rules-note">
+              Un essai est refusé si le mot est <strong>incomplet</strong>, <strong>inconnu</strong>,
+              <strong>déjà proposé</strong>, ne commence pas par la première lettre imposée, ou n’est pas accepté par le
+              dictionnaire. En <strong>solo</strong>, l’essai est perdu. En <strong>équipe</strong>, le comportement
+              dépend du réglage choisi au menu (voir ci-dessous).
+            </p>
+
+            <h3 class="app-overlay-h3">Chrono (optionnel)</h3>
+            <p>
+              Si le chrono est activé, chaque équipe ou joueur dispose d’un temps limité par tour (8 à 30&nbsp;s). Le
+              compte à rebours démarre après l’annonce de la première lettre. Temps écoulé&nbsp;: essai perdu en solo ;
+              passage à l’équipe suivante en mode équipe (ligne réinitialisée, sans lettre bonus).
+            </p>
+
+            <h3 class="app-overlay-h3">Mode équipe</h3>
+            <p>De 2 à 4 équipes. Chaque équipe a son <strong>score</strong> et sa <strong>grille de chiffres</strong>. Les équipes se relaient à chaque essai validé (mot correct ou incorrect).</p>
+            <p class="rules-after-try">Après une erreur, au choix dans le menu&nbsp;:</p>
+            <ul class="rules-list">
+              <li><strong>Remplacer la ligne + lettre bonus</strong> — la même équipe recommence la ligne ; une lettre du mot (la première encore inconnue) est révélée.</li>
+              <li><strong>Remplacer la ligne</strong> — la même équipe efface et retape sa ligne.</li>
+              <li><strong>Ajouter une ligne + lettre bonus</strong> — l’équipe suivante joue une ligne de moins ; lettre bonus pour elle.</li>
+              <li><strong>Ajouter une ligne</strong> — l’équipe suivante joue sans bonus.</li>
+            </ul>
+            <p class="app-overlay-muted">
+              La lettre bonus apparaît en clignotant (son dédié) ; le chrono ne repart qu’après cette séquence.
+            </p>
+
+            <h3 class="app-overlay-h3">Mot trouvé — grille chiffres et points</h3>
+            <p>
+              Quand le mot est trouvé, l’équipe (ou le joueur) marque des points et effectue un <strong>tirage</strong>
+              sur sa grille 5×5 de numéros (jusqu’à deux boules, sauf boule noire ou ligne Motus déjà complète).
+            </p>
+            <ul class="rules-list">
+              <li><strong>+50 points</strong> — mot trouvé (sauf dernier mot de la partie).</li>
+              <li><strong>+100 points</strong> — mot trouvé sur le <strong>dernier mot</strong> du quota.</li>
+              <li><strong>+100 points</strong> — une ligne, colonne ou diagonale complète sur le plateau (alignement «&nbsp;Motus&nbsp;»).</li>
+              <li><strong>Boule noire</strong> — la main passe à l’équipe suivante (mode équipe).</li>
+            </ul>
+
+            <h3 class="app-overlay-h3">Dernier mot et fin de partie</h3>
+            <p>
+              Lorsque le quota de mots est atteint (8, 10, 12, 15 ou mode illimité sans fin automatique), les scores
+              totaux déterminent le <strong>gagnant</strong>.
+            </p>
+            <p>
+              Sur le <strong>dernier mot</strong>, en mode équipe&nbsp;: le tirage plateau n’a lieu que si l’équipe qui
+              vient de trouver le mot peut encore <strong>gagner la partie</strong> grâce à une ligne Motus (+100 pts),
+              et que cette ligne est possible avec les numéros restants. Sinon la partie se termine directement après les
+              +100 pts du mot.
+            </p>
+            <p class="app-overlay-muted">
+              Si personne ne trouve le mot, il est révélé lettre par lettre ; le son «&nbsp;mot non trouvé&nbsp;» se joue
+              à la fin de la révélation.
             </p>
           </div>
         </div>
@@ -311,9 +365,28 @@
             <h2 class="app-overlay-title">Paramètres</h2>
           </div>
           <div class="app-overlay-body">
+            <h3 class="app-overlay-h3">Son</h3>
+            <label class="menu-field menu-field--checkbox" for="audio-mute-voices">
+              <input type="checkbox" id="audio-mute-voices" />
+              <span>Couper les voix (animateur, 1ʳᵉ lettre, numéros tirés)</span>
+            </label>
+            <label class="menu-field menu-field--checkbox" for="audio-mute-music">
+              <input type="checkbox" id="audio-mute-music" />
+              <span>Couper la musique du menu (générique)</span>
+            </label>
+            <label class="menu-field menu-field--checkbox" for="audio-mute-sfx">
+              <input type="checkbox" id="audio-mute-sfx" />
+              <span>Couper les effets sonores (plateau, validation, victoire…)</span>
+            </label>
+            <p class="app-overlay-muted">
+              Ces réglages sont mémorisés sur cet appareil. La musique et les voix reprennent au menu ; les effets
+              concernent la partie en cours.
+            </p>
+
+            <h3 class="app-overlay-h3">Partie</h3>
             <p>
-              <strong>Longueur du mot.</strong> Choisissez un nombre de lettres (5 à 10) sur l’onglet
-              <strong>Jouer</strong>, puis lancez une partie. Le changement s’applique au prochain mot.
+              Les autres options (mode, chrono, nombre de mots, longueur…) se configurent sur l’onglet
+              <strong>Jouer</strong> (bouton orange).
             </p>
           </div>
         </div>

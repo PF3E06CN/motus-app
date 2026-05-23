@@ -6,6 +6,8 @@
  * 3) Bips synthétiques si tout échoue.
  */
 
+import { isSfxEnabled, isVoicesEnabled } from './audio-settings.js';
+
 const EXT_PRIORITY = ['.mp3'];
 
 /**
@@ -88,6 +90,7 @@ export function soundHref(filename) {
  * @returns {Promise<boolean>}
  */
 export async function playPublicSoundFile(filename) {
+  if (!isSfxEnabled()) return false;
   unlockAudioSync();
   return firePlateauEphemeralSingleSrc(soundHref(filename), `public-${filename}`);
 }
@@ -98,6 +101,7 @@ export async function playPublicSoundFile(filename) {
  */
 async function playPublicSoundFileUntilEnd(filename, maxWaitMs = 22000) {
   if (!filename) return false;
+  if (!isSfxEnabled()) return false;
   unlockAudioSync();
   const srcUrl = soundHref(filename);
   if (!srcUrl) return false;
@@ -179,6 +183,7 @@ export async function playTimeoutSound() {
  * @param {string} domId
  */
 export async function playHtmlAudioById(domId, maxWaitMs = 22000) {
+  if (!isSfxEnabled()) return false;
   unlockAudioSync();
   const el = document.getElementById(domId);
   if (!(el instanceof HTMLAudioElement) || el.error) return false;
@@ -273,6 +278,7 @@ async function loadCastVoiceBuffer(basename, opts = {}) {
  * @param {string[]} basenames
  */
 export function primeCastVoiceBasenames(basenames) {
+  if (!isVoicesEnabled()) return;
   if (!basenames?.length) return;
   unlockAudioSync();
   const ctx = getCtx();
@@ -290,6 +296,7 @@ export function primeCastVoiceBasenames(basenames) {
  * @param {string[]} basenames noms sans extension (ex. `['m']`, `['23']`)
  */
 export async function playCastVoiceBasenames(basenames) {
+  if (!isVoicesEnabled()) return false;
   if (!basenames?.length) return false;
   const ctx = getCtx();
   if (ctx) await ensureRunning(ctx);
@@ -1187,6 +1194,7 @@ function pauseAfterVerifyOutcome(_outcome) {
  */
 export async function playVerifyLetterSound(outcome, opts = {}) {
   if (outcome !== 'correct' && outcome !== 'wrong' && outcome !== 'missing') return;
+  if (!isSfxEnabled()) return;
   const { index = 0, wordLen = 1, isWin = false } = opts;
   try {
     if (isSafariBrowser() && safariVerifyWarmed) {
@@ -1271,6 +1279,7 @@ export async function playVerifySequence(results, opts = {}) {
 }
 
 export async function playErrorBuzz() {
+  if (!isSfxEnabled()) return;
   try {
     unlockAudioSync();
     const ok = await playRoleSample('invalid');
@@ -1298,6 +1307,7 @@ export async function playErrorBuzz() {
 }
 
 export async function playWinFanfare() {
+  if (!isSfxEnabled()) return;
   try {
     unlockAudioSync();
     const ok = await playRoleSample('win');
@@ -1931,6 +1941,10 @@ export function playGridBallRevealSound(opts = {}) {
 }
 
 async function playGridBallRevealSoundBody(opts = {}) {
+  if (!isSfxEnabled()) {
+    if (opts.awaitCompletion) await delay(80);
+    return;
+  }
   const { cacheKey, bases, clipSec, domId } = PLATEAU_KEYS.revealNumber;
   try {
     unlockAudioSync();
@@ -1993,6 +2007,10 @@ export function playGridBallHideSound(opts = {}) {
 }
 
 async function playGridBallHideSoundBody(opts = {}) {
+  if (!isSfxEnabled()) {
+    if (opts.awaitCompletion) await delay(80);
+    return;
+  }
   const { cacheKey, bases, clipSec, domId } = PLATEAU_KEYS.hideEight;
   if (!plateauEffectConfigured(bases, domId)) {
     if (opts.awaitCompletion) await delay(80);
@@ -2040,6 +2058,10 @@ export function playGridBlackBallSound(opts = {}) {
 }
 
 async function playGridBlackBallSoundBody(opts = {}) {
+  if (!isSfxEnabled()) {
+    if (opts.awaitCompletion) await delay(80);
+    return;
+  }
   const { cacheKey, bases, clipSec, domId } = PLATEAU_KEYS.blackBall;
   try {
     unlockAudioSync();
@@ -2091,6 +2113,10 @@ export function playGridDrawNumberFlipSound(opts = {}) {
 }
 
 async function playGridDrawNumberFlipSoundBody(opts = {}) {
+  if (!isSfxEnabled()) {
+    if (opts.awaitCompletion) await delay(80);
+    return;
+  }
   const { cacheKey, bases, clipSec, domId } = PLATEAU_KEYS.drawFlip;
   try {
     unlockAudioSync();
@@ -2139,6 +2165,7 @@ export function playGridMotusLineSound() {
 }
 
 async function playGridMotusLineSoundBody() {
+  if (!isSfxEnabled()) return;
   const { cacheKey, bases, domId } = PLATEAU_KEYS.motusLine;
   try {
     unlockAudioSync();
