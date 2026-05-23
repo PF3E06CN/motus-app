@@ -404,6 +404,7 @@ function goToPlayMenu() {
   modal.classList.add('hidden');
   gamePanel.classList.add('hidden');
   menu.classList.remove('hidden');
+  syncBodyPlayMode();
   ballDrawEl?.classList.add('hidden');
   gridEl.classList.remove('grid--ball-pending');
   gamePanel.classList.remove('game--win-ball');
@@ -1222,6 +1223,11 @@ function showEndModal(payload) {
   modalWord.textContent = `Le mot était : ${payload.word}`;
 }
 
+function syncBodyPlayMode() {
+  const inGame = !!(gamePanel && !gamePanel.classList.contains('hidden'));
+  document.body.classList.toggle('game-in-play', inGame);
+}
+
 function syncGameLayoutVars(game) {
   if (!gamePanel || !game) return;
   gamePanel.style.setProperty('--word-len', String(game.length));
@@ -1270,6 +1276,7 @@ function patchVerifyRevealRow(game) {
 
 function render(game) {
   if (motus !== game) return;
+  syncBodyPlayMode();
   syncGameLayoutVars(game);
   if (game.loading) {
     messageEl.textContent = 'Chargement du dictionnaire…';
@@ -1402,6 +1409,7 @@ function renderKeyboard(game, letterUiReady = true) {
       const key = document.createElement('button');
       key.type = 'button';
       key.className = 'key';
+      key.setAttribute('lang', 'fr');
       key.textContent = ch;
       if (game.absentLetters.has(ch)) key.classList.add('absent');
       const canType = letterUiReady;

@@ -45,6 +45,8 @@
 
 html {
   font-size: 16px;
+  -webkit-text-size-adjust: 100%;
+  touch-action: manipulation;
 }
 
 body {
@@ -967,10 +969,12 @@ body {
     inset 0 -3px 5px var(--cell-bevel-dark);
   color: #fff;
   font-family: var(--font-plateau);
-  font-size: 0.92rem;
+  font-size: 1rem;
   font-weight: 900;
   text-shadow: 0 1px 2px rgba(0, 0, 0, 0.45);
   cursor: pointer;
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
   transition: filter 0.15s, transform 0.1s;
 }
 
@@ -1223,4 +1227,139 @@ body {
   background: rgba(0, 0, 0, 0.35);
   border-radius: 6px;
   color: #ffeb3b;
+}
+
+/* ——— iPhone / tactile : plus d’espace jeu, clavier confortable, pas de zoom Safari ——— */
+
+body.game-in-play #app {
+  padding: 0.4rem 0.45rem max(0.35rem, env(safe-area-inset-bottom));
+  max-width: 100%;
+}
+
+body.game-in-play .header {
+  margin-bottom: 0.35rem;
+}
+
+body.game-in-play .logo-img {
+  width: auto;
+  max-width: min(72vw, 220px);
+  max-height: 2.35rem;
+  object-fit: contain;
+}
+
+body.game-in-play .app-nav {
+  display: none;
+}
+
+body.game-in-play #game.panel {
+  gap: 0.4rem;
+}
+
+body.game-in-play .game-top {
+  margin-bottom: 0.2rem;
+  gap: 0.25rem 0.35rem;
+}
+
+body.game-in-play .motus-score-label {
+  font-size: 0.6rem;
+}
+
+body.game-in-play .motus-score-cell {
+  min-width: 1.35rem;
+  font-size: 0.92rem;
+  padding: 0.08rem 0.15rem;
+}
+
+body.game-in-play .attempts-label {
+  font-size: 0.75rem;
+}
+
+body.game-in-play .btn-ghost {
+  min-width: 2.75rem;
+  min-height: 2.75rem;
+  padding: 0.35rem;
+  font-size: 1.25rem;
+}
+
+body.game-in-play .message {
+  min-height: 0.85rem;
+  font-size: 0.82rem;
+  margin: 0;
+}
+
+@media (max-width: 520px) {
+  body.game-in-play #game.panel {
+    --cell-target: min(12.8vw, 2.72rem);
+  }
+}
+
+@media (max-width: 390px) {
+  body.game-in-play #game.panel {
+    --cell-target: min(11.6vw, 2.45rem);
+  }
+}
+
+@media (hover: none) and (pointer: coarse) {
+  .key {
+    flex: 1 1 0;
+    min-width: 0;
+    min-height: 2.75rem;
+    height: auto;
+    padding: 0.4rem 0.12rem;
+    font-size: 1.0625rem;
+    line-height: 1.1;
+    border-radius: 8px;
+    touch-action: manipulation;
+    -webkit-tap-highlight-color: transparent;
+    user-select: none;
+    -webkit-user-select: none;
+  }
+
+  .key:active:not(:disabled) {
+    transform: scale(0.96);
+    filter: brightness(1.08);
+  }
+
+  .kb-row {
+    display: flex;
+    width: 100%;
+    gap: 0.34rem;
+    padding: 0 0.05rem;
+  }
+
+  .keyboard {
+    width: 100%;
+    max-width: min(100vw - 0.9rem, var(--grid-width));
+    gap: 0.42rem;
+    margin-top: 0.35rem;
+    padding-bottom: max(0.25rem, env(safe-area-inset-bottom));
+  }
+
+  .game-actions {
+    width: 100%;
+    max-width: min(100vw - 0.9rem, var(--grid-width));
+    margin-top: 0.35rem;
+    gap: 0.5rem;
+  }
+
+  .game-actions .btn {
+    flex: 1;
+    min-height: 2.75rem;
+    font-size: 1rem;
+    touch-action: manipulation;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  .btn,
+  .nav-tab,
+  .length-btn,
+  .btn-ghost {
+    touch-action: manipulation;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  .nav-tab {
+    font-size: 1rem;
+    padding: 0.5rem 0.65rem;
+  }
 }
