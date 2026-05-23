@@ -8,17 +8,15 @@ Une fois le déploiement activé sur le dépôt :
 
 **https://pf3e06cn.github.io/motus-app/**
 
-1. Sur GitHub : **Settings** → **Pages** → **Build and deployment** → source **GitHub Actions** (recommandé).
-2. Poussez le dépôt (`git push`) : le workflow *Deploy GitHub Pages* build et publie automatiquement.
+1. Sur GitHub : **Settings** → **Pages** → **Build and deployment** → source **Deploy from a branch** → branche **`gh-pages`** → dossier **`/ (root)`**.
+2. Chaque `git push` sur `main` met à jour `gh-pages` via le workflow *Deploy GitHub Pages*.
 
-**Déploiement manuel** (si le push du workflow est refusé) :
+**Déploiement manuel** (immédiat) :
 
 ```bash
 npm install
 npm run deploy:pages
 ```
-
-Puis **Settings** → **Pages** → source **Deploy from a branch** → branche `gh-pages` → dossier `/ (root)`.
 
 Le jeu fonctionne **100 % hors ligne** une fois déployé ou servi localement (dictionnaires et sons inclus dans le dépôt).
 
