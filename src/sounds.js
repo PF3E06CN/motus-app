@@ -1506,18 +1506,24 @@ async function playPlateauDomToEnd(domId, opts = {}) {
   try {
     el.muted = false;
     el.currentTime = 0;
-    const p = el.play();
-    if (p !== undefined) await p.catch(() => {});
   } catch {
     return false;
   }
-  if (el.error) return false;
+  try {
+    const p = el.play();
+    if (p !== undefined) await p;
+  } catch {
+    return false;
+  }
+  if (el.error || el.paused) return false;
   const capMs =
     Number.isFinite(el.duration) && el.duration > 0
       ? Math.min(maxCap, Math.ceil(el.duration * 1000) + 2000)
       : maxCap;
-  await waitAudioEndReason(el, capMs);
-  return true;
+  const reason = await waitAudioEndReason(el, capMs);
+  if (reason === 'ended') return true;
+  if (reason === 'timeout') return el.currentTime > 0.04 && !el.paused;
+  return false;
 }
 
 let plateauAudioChain = Promise.resolve();
@@ -1621,6 +1627,60 @@ async function firePlateauEphemeralFromDomAudioSrc(domId) {
   const url = ref.currentSrc || ref.src;
   if (!url) return false;
   return firePlateauEphemeralSingleSrc(url, `ephemeral-dom-${domId}`);
+}
+
+/**
+ * Lecture jetable jusqu’à la fin (évite qu’une balise plateau occupée bloque le son Motus).
+ * @param {string} domId
+ * @param {{ maxWaitMs?: number }} [opts]
+ */
+async function playPlateauEphemeralDomToEnd(domId, opts = {}) {
+  const ref = document.getElementById(domId);
+  if (!ref || !(ref instanceof HTMLAudioElement) || ref.error) return false;
+  const url = ref.currentSrc || ref.src;
+  if (!url) return false;
+  const maxCap = opts.maxWaitMs ?? 120000;
+  const el = document.createElement('audio');
+  el.setAttribute('playsinline', '');
+  el.setAttribute('webkit-playsinline', '');
+  el.preload = 'auto';
+  el.style.display = 'none';
+  el.setAttribute('data-motus-plateau', `ephemeral-end-dom-${domId}`);
+  document.body.appendChild(el);
+  el.src = url;
+  try {
+    el.load();
+  } catch {
+    detachPlateauAudioEl(el);
+    return false;
+  }
+  const ready = await waitPlateauCanPlay(el, 8000);
+  if (!ready || el.error) {
+    detachPlateauAudioEl(el);
+    return false;
+  }
+  try {
+    el.muted = false;
+    el.currentTime = 0;
+    const p = el.play();
+    if (p !== undefined) await p;
+  } catch {
+    detachPlateauAudioEl(el);
+    return false;
+  }
+  if (el.error || el.paused) {
+    detachPlateauAudioEl(el);
+    return false;
+  }
+  const capMs =
+    Number.isFinite(el.duration) && el.duration > 0
+      ? Math.min(maxCap, Math.ceil(el.duration * 1000) + 2000)
+      : maxCap;
+  const reason = await waitAudioEndReason(el, capMs);
+  detachPlateauAudioEl(el);
+  if (reason === 'ended') return true;
+  if (reason === 'timeout') return el.currentTime > 0.04;
+  return false;
 }
 
 /**
@@ -2169,7 +2229,7 @@ async function playGridMotusLineSoundBody() {
   const { cacheKey, bases, domId } = PLATEAU_KEYS.motusLine;
   try {
     unlockAudioSync();
-    if (domId && (await playPlateauDomToEnd(domId, { maxWaitMs: 120000 }))) return;
+    pauseBackgroundMediaForVerify();
     const ctx = getCtx();
     if (ctx) {
       await ensureRunning(ctx);
@@ -2180,6 +2240,8 @@ async function playGridMotusLineSoundBody() {
         return;
       }
     }
+    if (domId && (await playPlateauDomToEnd(domId, { maxWaitMs: 120000 }))) return;
+    if (domId && (await playPlateauEphemeralDomToEnd(domId, { maxWaitMs: 120000 }))) return;
     if (await playPlateauHtml(bases, null, true)) return;
     const ctx2 = getCtx();
     if (ctx2) await ensureRunning(ctx2);

@@ -265,6 +265,49 @@ function pauseMenuGenerique() {
   }
 }
 
+/**
+ * @param {{ loop?: boolean, resetTime?: boolean }} [opts]
+ * @returns {Promise<'playing'|'muted'|'blocked'|'off'>}
+ */
+function playGeneriqueTrack(opts = {}) {
+  const { loop = true, resetTime = false } = opts;
+  const el = document.getElementById('motus-snd-generique');
+  if (!el || !(el instanceof HTMLAudioElement)) return Promise.resolve('off');
+  if (!isMusicEnabled()) {
+    pauseMenuGenerique();
+    el.muted = true;
+    return Promise.resolve('off');
+  }
+  if (!gamePanel.classList.contains('hidden')) {
+    pauseMenuGenerique();
+    return Promise.resolve('off');
+  }
+  el.loop = loop;
+  el.volume = MENU_GENERIQUE_VOL;
+  if (resetTime) {
+    try {
+      el.currentTime = 0;
+    } catch {
+      /* ignore */
+    }
+  }
+  el.muted = false;
+  const attempt = el.play();
+  if (attempt === undefined) return Promise.resolve('playing');
+  return attempt
+    .then(() => {
+      menuGeneriqueAwaitingGestureUnmute = false;
+      return 'playing';
+    })
+    .catch(() => {
+      el.muted = true;
+      menuGeneriqueAwaitingGestureUnmute = true;
+      const mutedAttempt = el.play();
+      if (mutedAttempt === undefined) return 'muted';
+      return mutedAttempt.then(() => 'muted').catch(() => 'blocked');
+    });
+}
+
 function syncAudioSettingsToDom() {
   const s = getAudioSettings();
   const voicesEl = $('#audio-mute-voices');
@@ -369,9 +412,9 @@ function syncMenuGenerique() {
   unlockAudioSync();
   if (menuGeneriqueAwaitingGestureUnmute) {
     menuGeneriqueAwaitingGestureUnmute = false;
-    const resumeFromStart = el.muted || el.paused;
+    const restartFromHead = el.paused || el.currentTime <= 0.05;
     el.muted = false;
-    if (resumeFromStart) {
+    if (restartFromHead) {
       try {
         el.currentTime = 0;
       } catch {
@@ -401,13 +444,23 @@ function handoffGeneriqueToMenuMusic() {
     pauseMenuGenerique();
     return;
   }
-  menuGeneriqueAwaitingGestureUnmute = false;
   unlockAudioSync();
   el.loop = true;
   el.volume = MENU_GENERIQUE_VOL;
+  if (el.paused || el.ended) {
+    void playGeneriqueTrack({ loop: true, resetTime: false });
+    return;
+  }
+  menuGeneriqueAwaitingGestureUnmute = false;
   el.muted = false;
   const p = el.play();
-  if (p !== undefined) void p.catch(() => {});
+  if (p !== undefined) {
+    void p.catch(() => {
+      el.muted = true;
+      menuGeneriqueAwaitingGestureUnmute = true;
+      void el.play().catch(() => {});
+    });
+  }
 }
 
 /** Retour menu depuis une partie : générique repart du début. */
@@ -1212,11 +1265,16 @@ function initMenu() {
       pauseMenuGenerique,
       syncMenuGenerique,
       handoffGeneriqueToMenuMusic,
+      playGeneriqueAudio: playGeneriqueTrack,
       menuVolume: MENU_GENERIQUE_VOL,
       force: true,
     }).then((result) => {
-      if (result?.withAudio) handoffGeneriqueToMenuMusic();
-      else scheduleInitialMenuGenerique();
+      if (result?.withAudio) {
+        handoffGeneriqueToMenuMusic();
+        tryStartMenuGeneriqueMutedAutoplay();
+      } else {
+        scheduleInitialMenuGenerique();
+      }
     });
   });
 
@@ -1504,7 +1562,10 @@ function resetBallPlateauSession(opts = {}) {
   }
   if (full && opts.teamIndex == null) {
     const host = $('#ball-motus-grid');
-    if (host) host.innerHTML = '';
+    if (host) {
+      host.innerHTML = '';
+      delete host.dataset.plateauTeam;
+    }
   }
 }
 
@@ -1514,6 +1575,7 @@ function mountPlateauGridForTeam(teamIndex) {
   const host = $('#ball-motus-grid');
   if (!host) return;
   host.innerHTML = '';
+  host.dataset.plateauTeam = String(teamIndex);
   buildWinBallGridDom(host);
   if (!session.introSequenceComplete) return;
   host.querySelectorAll('.ball-flip-inner').forEach((el) => {
@@ -1628,9 +1690,23 @@ function ensureHidden8AndUrnNumbers(teamIndex = activeTeamIndex()) {
 function syncBallGridHitsToDom(teamIndex = activeTeamIndex()) {
   plateauSession(teamIndex).hitNumbers.forEach((n) => {
     const wrap = document.querySelector(`#ball-motus-grid .ball-flip-wrap[data-num="${n}"]`);
-    if (!wrap) return;
+    if (!wrap || wrap.classList.contains('ball-flip-wrap--motus-letter')) return;
     wrap.classList.add('ball-flip-wrap--hit');
+    wrap.querySelector('.ball-flip-inner')?.classList.remove('ball-flip-inner--revealed');
   });
+}
+
+/** Monte la grille une seule fois par équipe ; évite de réinitialiser les retournements en cours. */
+function ensurePlateauGridDom(teamIndex = activeTeamIndex()) {
+  const host = $('#ball-motus-grid');
+  if (!host) return;
+  const mountedTeam = host.dataset.plateauTeam;
+  if (host.childElementCount > 0 && mountedTeam === String(teamIndex)) {
+    syncBallGridHitsToDom(teamIndex);
+    return;
+  }
+  host.dataset.plateauTeam = String(teamIndex);
+  mountPlateauGridForTeam(teamIndex);
 }
 
 /** Remplit l’urne (17 + 3) une fois par cycle Motus ; les tirages enlèvent des boules sans remise jusqu’au Motus ou le menu. */
@@ -1859,6 +1935,8 @@ async function runWinBallMotus(epochSnap, teamIndex = activeTeamIndex()) {
   if (motusLine) {
     addSessionMotusScore(getMotusLineScoreForSession(), teamIndex);
     unlockAudioSync();
+    pauseMenuGenerique();
+    await primeGridBallSounds().catch(() => {});
     const motusSoundPromise = playGridMotusLineSound().catch(() => {});
     await Promise.all([
       playMotusLineLettersFlipSequence(epochSnap, teamIndex),
@@ -2116,7 +2194,7 @@ function render(game) {
     ballDrawEl.classList.toggle('hidden', !showBallGrid);
     const gridHost = $('#ball-motus-grid');
     if (showBallGrid) {
-      mountPlateauGridForTeam(plateauTeam);
+      ensurePlateauGridDom(plateauTeam);
     }
     const slots = ballDrawEl.querySelector('.win-ball-slots');
     const cont = $('#btn-win-continue');
@@ -2372,7 +2450,14 @@ let lastMenuAudioUiAt = 0;
 
 function bindMenuGeneriqueListener() {
   const onUserActivateAudio = () => {
-    if (isGeneriqueOverlayVisible()) return;
+    if (isGeneriqueOverlayVisible()) {
+      const now = typeof performance !== 'undefined' ? performance.now() : Date.now();
+      if (now - lastMenuAudioUiAt < 40) return;
+      lastMenuAudioUiAt = now;
+      unlockAudioSync();
+      syncMenuGenerique();
+      return;
+    }
     if (!gamePanel.classList.contains('hidden')) {
       pauseMenuGenerique();
       return;
@@ -2407,9 +2492,14 @@ void initGeneriqueIntro({
   pauseMenuGenerique,
   syncMenuGenerique,
   handoffGeneriqueToMenuMusic,
+  playGeneriqueAudio: playGeneriqueTrack,
   menuVolume: MENU_GENERIQUE_VOL,
 }).then((result) => {
-  if (result?.withAudio) handoffGeneriqueToMenuMusic();
-  else scheduleInitialMenuGenerique();
+  if (result?.withAudio) {
+    handoffGeneriqueToMenuMusic();
+    tryStartMenuGeneriqueMutedAutoplay();
+  } else {
+    scheduleInitialMenuGenerique();
+  }
 });
 ensureKeyboardLayoutObserver();

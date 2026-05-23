@@ -56,7 +56,7 @@ const INTRO_TIMELINE = [
 ];
 
 /**
- * @param {{ pauseMenuGenerique: () => void, syncMenuGenerique: () => void, handoffGeneriqueToMenuMusic?: () => void, menuVolume?: number, force?: boolean }} opts
+ * @param {{ pauseMenuGenerique: () => void, syncMenuGenerique: () => void, handoffGeneriqueToMenuMusic?: () => void, playGeneriqueAudio?: (opts: { loop?: boolean, resetTime?: boolean }) => Promise<string>, menuVolume?: number, force?: boolean }} opts
  * @returns {Promise<{ withAudio?: boolean } | void>}
  */
 export function initGeneriqueIntro(opts) {
@@ -255,7 +255,10 @@ function playIntro(opts) {
     });
   }
 
-  if (audio instanceof HTMLAudioElement) {
+  if (typeof opts.playGeneriqueAudio === 'function') {
+    introSyncedAudio = true;
+    void opts.playGeneriqueAudio({ loop: false, resetTime: true });
+  } else if (audio instanceof HTMLAudioElement) {
     introSyncedAudio = true;
     audio.loop = false;
     audio.currentTime = 0;
