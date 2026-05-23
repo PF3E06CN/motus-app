@@ -100,9 +100,8 @@ let sessionWordsCompleted = 0;
 let sessionWordsWon = 0;
 let sessionWordsLost = 0;
 let motus = null;
-/** Au chargement `false` : le panneau #menu (longueurs + Jouer) est masqué. Passe à `true` au premier « Jouer » dans la barre du haut. */
-/** Menu Jouer visible dès l’ouverture (mode solo / équipe, réglages). */
-let playMenuRevealed = true;
+/** Au chargement `false` : le panneau #menu est masqué jusqu’au clic sur « Jouer » (barre du haut). */
+let playMenuRevealed = false;
 
 const MENU_GENERIQUE_VOL = 0.42;
 
@@ -2271,7 +2270,6 @@ syncAudioSettingsToDom();
 applyMusicSetting();
 
 initMenu();
-if (playMenuRevealed) menu?.classList.remove('hidden');
 if (gamePanel && !gamePanel.hasAttribute('tabindex')) {
   gamePanel.setAttribute('tabindex', '-1');
 }
