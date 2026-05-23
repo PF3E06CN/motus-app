@@ -75,7 +75,7 @@
 
       <nav class="app-nav" aria-label="Navigation principale">
         <button type="button" class="nav-tab active" data-nav="play" id="nav-play">Jouer</button>
-        <button type="button" class="nav-tab" data-nav="aide" id="nav-aide">Aide</button>
+        <button type="button" class="nav-tab" data-nav="aide" id="nav-aide">Règles</button>
         <button type="button" class="nav-tab" data-nav="settings" id="nav-settings">Paramètres</button>
         <button type="button" class="nav-tab" data-nav="credits" id="nav-credits">Crédits</button>
         <button type="button" class="nav-tab" data-nav="debug" id="nav-debug">Debug</button>
@@ -86,9 +86,6 @@
         <div class="length-picker" id="length-picker"></div>
         <button type="button" class="btn btn-primary" id="btn-play">Jouer</button>
         <p id="menu-loading-status" class="hint menu-loading-status hidden" role="status" aria-live="polite"></p>
-        <p class="hint">
-          1re lettre dans la grille : tapez-la pour avancer, puis épellez le mot · Entrée valider
-        </p>
       </section>
 
       <section id="game" class="panel hidden">
@@ -180,44 +177,61 @@
         </div>
       </section>
 
-      <!-- Panneaux type motusJS (Aide / Paramètres / Crédits) -->
+      <!-- Panneaux type motusJS (Règles / Paramètres / Crédits) -->
       <section id="overlay-aide" class="app-overlay hidden" aria-hidden="true">
         <div class="app-overlay-backdrop" data-close-overlay tabindex="-1"></div>
         <div class="app-overlay-card" role="document">
           <div class="app-overlay-top">
             <button type="button" class="btn-overlay-back" data-close-overlay aria-label="Retour">🡰</button>
-            <h2 class="app-overlay-title">Aide</h2>
+            <h2 class="app-overlay-title">Règles</h2>
           </div>
-          <div class="app-overlay-body">
-            <p><strong>But.</strong> Devinez le mot en un nombre d’essais limité (égal au nombre de lettres).</p>
-            <p>
-              <strong>Grille Motus (plateau).</strong> Dès le début de la partie, la <strong>grille 5 × 5</strong> se
-              présente comme à l’émission : <strong>25 numéros</strong> dans l’ordre
-              <strong>gauche → droite, haut → bas</strong>, puis <strong>8 cases</strong> repassent
-              <strong>face cachée</strong> (au plus <strong>2 par ligne, colonne ou diagonale</strong>, au moins 1).
-              Vous jouez alors le <strong>premier mot</strong> sans tirage de boule : la grille des chiffres se replie
-              pour laisser la <strong>grille de lettres</strong>. Après une
-              <strong>victoire</strong>, tirage(s) dans l’<strong>urne</strong> (17 numéros encore visibles +
-              <strong>3 boules noires</strong>) : si la <strong>première boule n’est pas noire</strong>, un
-              <strong>second tirage</strong> a lieu ; si la <strong>première est noire</strong>, il n’y a
-              <strong>pas de second tirage</strong> (la main passe). Les boules tirées ne reviennent pas dans l’urne
-              tant que le plateau n’est pas réinitialisé (Motus ou menu).
+          <div class="app-overlay-body rules-body">
+            <p class="rules-lead">
+              Trouvez le <strong>mot mystère</strong>. Vous avez autant d’<strong>essais</strong> que de lettres dans le
+              mot.
             </p>
-            <p>
-              <strong>Première lettre.</strong> Elle est donnée : tapez-la au clavier pour valider la case, puis
-              épellez le reste du mot.
+
+            <ol class="rules-steps">
+              <li>La <strong>première lettre</strong> est imposée : tapez-la, puis complétez le mot.</li>
+              <li>À chaque essai, proposez le mot <strong>en entier</strong> (même longueur que la grille).</li>
+              <li>Validez avec <kbd>Entrée</kbd> ou le bouton <strong>Valider</strong>.</li>
+            </ol>
+
+            <h3 class="app-overlay-h3">Signification des couleurs</h3>
+            <p class="rules-after-try">Après validation, chaque lettre de votre essai est colorée :</p>
+
+            <ul class="rules-legend" aria-label="Légende des couleurs">
+              <li class="rules-legend-item">
+                <span class="rules-cell rules-cell--correct" aria-hidden="true">A</span>
+                <span><strong>Rouge</strong> — la lettre est au <strong>bon endroit</strong>.</span>
+              </li>
+              <li class="rules-legend-item">
+                <span class="rules-cell rules-cell--wrong" aria-hidden="true">T</span>
+                <span><strong>Jaune</strong> — la lettre est dans le mot, mais <strong>pas à cette place</strong>.</span>
+              </li>
+              <li class="rules-legend-item">
+                <span class="rules-cell rules-cell--missing" aria-hidden="true">Z</span>
+                <span><strong>Bleu</strong> — la lettre n’est <strong>pas dans le mot</strong>.</span>
+              </li>
+            </ul>
+
+            <div class="rules-example" aria-hidden="true">
+              <p class="rules-example-label">Exemple après un essai</p>
+              <div class="rules-example-row">
+                <span class="rules-cell rules-cell--correct">M</span>
+                <span class="rules-cell rules-cell--wrong">O</span>
+                <span class="rules-cell rules-cell--missing">T</span>
+                <span class="rules-cell rules-cell--missing">U</span>
+                <span class="rules-cell rules-cell--correct">S</span>
+              </div>
+            </div>
+
+            <p class="rules-keyboard-hint">
+              Sur le clavier, les touches <strong>bleu foncé</strong> indiquent les lettres déjà marquées absentes du mot.
             </p>
-            <p>
-              <strong>Couleurs.</strong> Rouge = bien placé · jaune = mal placé (présente ailleurs) · bleu = absente
-              du mot.
-            </p>
-            <p>
-              <strong>Validation.</strong> Bouton « Valider » ou touche <kbd>Entrée</kbd>. Mot incomplet, inconnu ou règle
-              non respectée = essai perdu.
-            </p>
-            <p>
-              <strong>Clavier.</strong> AZERTY à l’écran ou clavier physique · <kbd>←</kbd> <kbd>→</kbd> déplacent le
-              curseur · <kbd>Retour arrière</kbd> efface.
+
+            <p class="app-overlay-muted rules-note">
+              Mot incomplet, inconnu ou non admis par le dictionnaire : l’essai est perdu.
             </p>
           </div>
         </div>
@@ -235,11 +249,6 @@
               <strong>Longueur du mot.</strong> Choisissez un nombre de lettres (5 à 10) sur l’onglet
               <strong>Jouer</strong>, puis lancez une partie. Le changement s’applique au prochain mot.
             </p>
-            <p>
-              <strong>Sons.</strong> Des fichiers audio dans <code>public/sounds/</code> (MP3 recommandés) ; un clic
-              sur « Jouer » débloque la lecture sur mobile.
-            </p>
-            <p class="app-overlay-muted">Clavier fixe AZERTY (non modifiable dans cette version).</p>
           </div>
         </div>
       </section>

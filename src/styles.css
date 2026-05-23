@@ -1222,6 +1222,143 @@ body {
   font-size: 0.85rem;
 }
 
+/* ——— Règles (overlay) ——— */
+.rules-body p {
+  margin: 0 0 0.75rem;
+}
+
+.rules-lead {
+  font-size: 0.95rem;
+}
+
+.rules-steps {
+  margin: 0 0 1rem;
+  padding-left: 1.15rem;
+  line-height: 1.5;
+}
+
+.rules-steps li {
+  margin-bottom: 0.45rem;
+}
+
+.rules-steps li:last-child {
+  margin-bottom: 0;
+}
+
+.rules-after-try {
+  font-size: 0.88rem;
+  color: var(--text-muted);
+  margin-bottom: 0.55rem !important;
+}
+
+.rules-legend {
+  list-style: none;
+  margin: 0 0 1rem;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.55rem;
+}
+
+.rules-legend-item {
+  display: flex;
+  align-items: center;
+  gap: 0.7rem;
+  font-size: 0.9rem;
+  line-height: 1.35;
+}
+
+.rules-cell {
+  flex-shrink: 0;
+  width: 2.35rem;
+  height: 2.35rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 4px;
+  border: 1px solid var(--cell-border);
+  font-family: var(--font-plateau);
+  font-weight: 900;
+  font-size: 1.15rem;
+  color: #fff;
+  text-transform: uppercase;
+  box-shadow:
+    inset 0 2px 2px var(--cell-bevel-light),
+    inset 0 -3px 5px var(--cell-bevel-dark);
+}
+
+.rules-cell--correct {
+  background: linear-gradient(
+    180deg,
+    var(--cell-red-top) 0%,
+    var(--cell-red-mid) 45%,
+    var(--cell-red-bottom) 78%,
+    var(--cell-red-deep) 100%
+  );
+}
+
+.rules-cell--missing {
+  background: linear-gradient(
+    180deg,
+    var(--cell-blue-top) 0%,
+    var(--cell-blue-mid) 50%,
+    var(--cell-blue-bottom) 100%
+  );
+}
+
+.rules-cell--wrong {
+  color: #1a1a1a;
+  text-shadow: 0 1px 0 rgba(255, 255, 255, 0.35);
+  background: radial-gradient(
+    circle at 38% 28%,
+    #fffef8 0%,
+    #fff59d 18%,
+    #ffeb3b 42%,
+    #fdd835 72%,
+    #f5bc14 100%
+  );
+  box-shadow:
+    inset 0 2px 2px rgba(255, 255, 255, 0.55),
+    inset 0 -3px 5px rgba(120, 80, 0, 0.35);
+}
+
+.rules-example {
+  margin: 0 0 0.85rem;
+  padding: 0.65rem 0.75rem;
+  border-radius: 8px;
+  background: rgba(0, 0, 0, 0.28);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+}
+
+.rules-example-label {
+  margin: 0 0 0.45rem !important;
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.rules-example-row {
+  display: flex;
+  justify-content: center;
+  gap: 0.28rem;
+  flex-wrap: wrap;
+}
+
+.rules-keyboard-hint {
+  font-size: 0.88rem;
+  padding: 0.55rem 0.65rem;
+  border-radius: 8px;
+  background: rgba(13, 61, 122, 0.45);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+}
+
+.rules-note {
+  margin-bottom: 0 !important;
+  margin-top: 0.65rem;
+}
+
 .debug-readout {
   font-family: ui-monospace, monospace;
   font-size: 0.82rem;
