@@ -31,6 +31,7 @@ import {
   playGridDrawNumberFlipSound,
   playGridBlackBallSound,
   playGridMotusLineSound,
+  playPlateauBallRollSound,
   playHtmlAudioById,
   wirePlateauAudioElementsFromSfx,
   wireVerifyAudioElementsFromSfx,
@@ -1530,6 +1531,8 @@ async function flipEightDesignatedCellsToHidden(epochSnap = null, teamIndex = ac
 const URN_BLACK_COUNT = 3;
 const URN_NUMBERED_COUNT = 17;
 const BALL_BLACK = 'BLACK';
+/** Délai avant d’afficher le tirage dans la boule (après le début du roulement). */
+const BALL_ROLL_REVEAL_MS = 3200;
 
 function shuffleInPlace(arr) {
   for (let i = arr.length - 1; i > 0; i--) {
@@ -1864,6 +1867,17 @@ async function playMotusLineLettersFlipSequence(epochSnap, teamIndex = activeTea
   await sleep(reduced ? 100 : 280);
 }
 
+function revealWinBallFace(mini, char, value, isBlack) {
+  if (isBlack) {
+    mini.classList.add('win-ball-mini--black');
+    char.textContent = '●';
+    char.setAttribute('aria-label', 'Boule noire');
+  } else {
+    char.textContent = String(value);
+    char.setAttribute('aria-label', `Numéro ${value}`);
+  }
+}
+
 async function animateWinBall(slotIndex, value, epochSnap = null, teamIndex = activeTeamIndex()) {
   const mini = document.getElementById(`win-ball-mini-${slotIndex}`);
   const char = document.getElementById(`win-ball-char-${slotIndex}`);
@@ -1874,13 +1888,16 @@ async function animateWinBall(slotIndex, value, epochSnap = null, teamIndex = ac
   char.textContent = '?';
   char.removeAttribute('aria-label');
   mini.classList.add('win-ball-mini--shake');
-  await sleep(720);
+  unlockAudioSync();
+  const rollEndPromise = playPlateauBallRollSound().catch(() => false);
+  const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  await sleep(reducedMotion ? 420 : BALL_ROLL_REVEAL_MS);
   if (shouldAbortPlateauSession(epochSnap)) return;
   mini.classList.remove('win-ball-mini--shake');
+  revealWinBallFace(mini, char, value, isBlack);
+  await rollEndPromise;
+  if (shouldAbortPlateauSession(epochSnap)) return;
   if (isBlack) {
-    mini.classList.add('win-ball-mini--black');
-    char.textContent = '●';
-    char.setAttribute('aria-label', 'Boule noire');
     unlockAudioSync();
     void playGridBlackBallSound().catch(() => {});
     mini.classList.add('win-ball-mini--pop');
@@ -1889,8 +1906,6 @@ async function animateWinBall(slotIndex, value, epochSnap = null, teamIndex = ac
     mini.classList.remove('win-ball-mini--pop');
   } else {
     unlockAudioSync();
-    char.textContent = String(value);
-    char.setAttribute('aria-label', `Numéro ${value}`);
     mini.classList.add('win-ball-mini--pop');
     await playCastDrawNumber(value).catch(() => {});
     if (shouldAbortPlateauSession(epochSnap)) return;

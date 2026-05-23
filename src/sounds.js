@@ -37,6 +37,8 @@ export const GAME_SFX = {
   plateauDrawFlip: 'Tirrage-Chiffre',
   plateauMotusLine: 'Motus',
   plateauBlackBall: 'BouleNoire',
+  /** Brassage de la boule avant tirage (roulement de tambour). */
+  plateauBallRoll: 'motus_roll',
 };
 
 const ROLE_TO_BASES = {
@@ -117,6 +119,7 @@ async function playPublicSoundFileUntilEnd(filename, maxWaitMs = 22000) {
   el.setAttribute('data-motus-plateau', `public-wait-${filename}`);
   document.body.appendChild(el);
   el.src = srcUrl;
+  el.volume = sfxElementVolume();
   try {
     el.load();
   } catch {
@@ -180,6 +183,12 @@ export async function playWordNotFoundSound() {
 export async function playTimeoutSound() {
   if (!GAME_SFX.timeout) return false;
   return playPublicSoundFileUntilEnd(`${GAME_SFX.timeout}.mp3`);
+}
+
+/** Roulement de tambour pendant le brassage de la boule (`public/sounds/motus_roll.mp3`). */
+export async function playPlateauBallRollSound() {
+  if (!GAME_SFX.plateauBallRoll) return false;
+  return playPublicSoundFileUntilEnd(`${GAME_SFX.plateauBallRoll}.mp3`, 30000);
 }
 
 /**
@@ -1993,6 +2002,9 @@ export async function primeGridBallSounds() {
     await loadFirstPlateauBuffer(ctx, PLATEAU_KEYS.drawFlip.cacheKey, PLATEAU_KEYS.drawFlip.bases);
     await loadFirstPlateauBuffer(ctx, PLATEAU_KEYS.blackBall.cacheKey, PLATEAU_KEYS.blackBall.bases);
     await loadFirstPlateauBuffer(ctx, PLATEAU_KEYS.motusLine.cacheKey, PLATEAU_KEYS.motusLine.bases);
+    if (GAME_SFX.plateauBallRoll) {
+      await fetch(soundHref(`${GAME_SFX.plateauBallRoll}.mp3`)).catch(() => {});
+    }
   } catch {
     /* ignore */
   }
