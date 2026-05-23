@@ -1193,6 +1193,9 @@ async function startGame() {
       if (ok && motus === game) lastCastAnnouncedTarget = game.target;
     });
     scheduleCastLetterOnGesture();
+    if (isSafariBrowser()) {
+      void warmVerifyAudio();
+    }
   } finally {
     setMenuLoading(false);
   }
@@ -1395,7 +1398,6 @@ function bindControls() {
   $('#btn-submit').addEventListener('click', () => {
     if (!motus || !isLetterGridActive(motus)) return;
     unlockAudioSync();
-    void warmVerifyAudio().catch(() => {});
     if (!isSafariBrowser()) {
       void primeAudioContext().catch(() => {});
     }

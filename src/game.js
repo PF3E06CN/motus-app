@@ -273,7 +273,6 @@ export class MotusGame {
 
   async submit() {
     unlockAudioSync();
-    void warmVerifyAudio().catch(() => {});
     if (this.winBallPhase) return;
     if (this.inputLocked) {
       this.message = 'Correction en cours…';
@@ -317,6 +316,7 @@ export class MotusGame {
 
     this.inputLocked = true;
     try {
+      await warmVerifyAudio();
       for (let i = 0; i < this.length; i++) {
         row.states[i] = results[i];
         if (results[i] === 'correct') {

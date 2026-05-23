@@ -283,6 +283,8 @@ const safariVerifySlotsByRole = new Map();
 /** @type {Record<string, number>} */
 const safariVerifySlotFlip = { correct: 0, wrong: 0, missing: 0 };
 let safariVerifyWarmed = false;
+/** @type {Promise<void> | null} */
+let safariVerifyWarmInFlight = null;
 /** @type {AudioBufferSourceNode | null} */
 let activeSafariVerifySource = null;
 
@@ -590,18 +592,31 @@ export async function primeAudioContext() {
   }
 }
 
-/**
- * Précharge les sons de validation sur Safari (pistes HTML en pool + buffers Web Audio de secours).
- */
-export async function warmVerifyAudio() {
-  if (!isSafariBrowser() || safariVerifyWarmed) return;
-  safariVerifyWarmed = true;
+async function warmSafariVerifySlotElement(el, href) {
+  configureSafariVerifyElement(el);
+  el.muted = true;
+  const prev = el.getAttribute('data-motus-verify-href');
+  if (prev !== href) {
+    el.setAttribute('data-motus-verify-href', href);
+    el.src = href;
+    try {
+      el.load();
+    } catch {
+      return;
+    }
+  }
+  await waitMediaCanPlayThrough(el, 12000).catch(() => false);
+  el.muted = true;
+}
+
+async function warmVerifyAudioBody() {
   unlockAudioSync();
+  const tasks = [];
   const ctx = getCtx();
   if (ctx) {
     await ensureRunning(ctx);
     for (const role of VERIFY_SAMPLE_ROLES) {
-      await loadBufferForRole(ctx, role);
+      tasks.push(loadBufferForRole(ctx, role));
     }
   }
   for (const role of VERIFY_SAMPLE_ROLES) {
@@ -609,22 +624,27 @@ export async function warmVerifyAudio() {
     if (!href) continue;
     const pair = ensureSafariVerifySlots(role);
     for (const el of pair) {
-      configureSafariVerifyElement(el);
-      const prev = el.getAttribute('data-motus-verify-href');
-      if (prev !== href) {
-        el.setAttribute('data-motus-verify-href', href);
-        el.src = href;
-        try {
-          el.load();
-        } catch {
-          /* ignore */
-        }
-      }
-      el.muted = true;
-      await waitMediaCanPlayThrough(el, 10000).catch(() => false);
-      el.muted = true;
+      tasks.push(warmSafariVerifySlotElement(el, href));
     }
   }
+  await Promise.all(tasks);
+  safariVerifyWarmed = true;
+}
+
+/**
+ * Précharge les sons de validation sur Safari (buffers en RAM + pistes HTML iOS).
+ * Doit être terminé avant la séquence de validation (réseau lent sur GitHub Pages).
+ */
+export function warmVerifyAudio() {
+  if (!isSafariBrowser()) return Promise.resolve();
+  if (safariVerifyWarmed) return Promise.resolve();
+  if (safariVerifyWarmInFlight) return safariVerifyWarmInFlight;
+  safariVerifyWarmInFlight = warmVerifyAudioBody()
+    .catch(() => {})
+    .finally(() => {
+      safariVerifyWarmInFlight = null;
+    });
+  return safariVerifyWarmInFlight;
 }
 
 /** @deprecated Alias — utiliser {@link warmVerifyAudio}. */
@@ -886,6 +906,19 @@ async function playSafariVerifyOnElement(el, href) {
 async function playSafariVerifyRole(role) {
   if (!isSafariBrowser()) return false;
   await warmVerifyAudio();
+  /* Safari macOS : buffers décodés en RAM (pas de streaming réseau lettre par lettre). */
+  if (!isIOSDevice()) {
+    const ctx = getCtx();
+    if (ctx) {
+      await ensureRunning(ctx);
+      const cached = roleBuffers.get(role);
+      if (isUsableDecodedBuffer(cached)) {
+        await playBufferOnce(ctx, cached);
+        return true;
+      }
+    }
+    if (await playRoleSampleWebAudio(role)) return true;
+  }
   const href = hrefForVerifyRole(role);
   if (!href) return false;
   const el = borrowSafariVerifyElement(role);
@@ -909,6 +942,8 @@ async function playRoleSampleWebAudio(role) {
 export function clearDecodedSoundCache() {
   roleBuffers.clear();
   castVoiceBuffers.clear();
+  safariVerifyWarmed = false;
+  safariVerifyWarmInFlight = null;
 }
 
 /**
@@ -921,10 +956,7 @@ async function playRoleSample(role) {
   if (!safariVerify) unlockAudioSync();
 
   if (safariVerify) {
-    if (await playSafariVerifyRole(role)) return true;
-    const bases = ROLE_TO_BASES[role];
-    if (await playVerifySampleFromBases(bases)) return true;
-    return false;
+    return playSafariVerifyRole(role);
   }
 
   if (await playHtmlRole(role)) return true;
