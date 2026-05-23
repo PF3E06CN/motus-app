@@ -1,7 +1,6 @@
 import './intro-generique.css';
 import { createGenerique3D } from './intro-generique-3d.js';
 
-export const INTRO_STORAGE_KEY = 'motus-intro-seen-v2';
 const INTRO_DURATION = 29;
 
 /**
@@ -62,11 +61,6 @@ const INTRO_TIMELINE = [
  */
 export function initGeneriqueIntro(opts) {
   const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-  const alreadySeen = localStorage.getItem(INTRO_STORAGE_KEY) === '1';
-
-  if (!opts.force && alreadySeen) {
-    return Promise.resolve({ withAudio: false });
-  }
 
   if (!opts.force && reducedMotion) {
     return playStaticIntro(opts);
@@ -76,11 +70,6 @@ export function initGeneriqueIntro(opts) {
 }
 
 export function replayGeneriqueIntro(opts) {
-  try {
-    localStorage.removeItem(INTRO_STORAGE_KEY);
-  } catch {
-    /* ignore */
-  }
   return initGeneriqueIntro({ ...opts, force: true });
 }
 
@@ -241,12 +230,6 @@ function playIntro(opts) {
 
     handoffAudio();
 
-    try {
-      localStorage.setItem(INTRO_STORAGE_KEY, '1');
-    } catch {
-      /* ignore */
-    }
-
     setTimeout(() => {
       overlay.hidden = true;
       overlay.classList.remove('generique--fade-out', 'generique--static');
@@ -347,11 +330,6 @@ function playStaticIntro(opts) {
         });
       }
       if (app) app.style.visibility = '';
-      try {
-        localStorage.setItem(INTRO_STORAGE_KEY, '1');
-      } catch {
-        /* ignore */
-      }
       opts.syncMenuGenerique();
       resolve({ withAudio: false });
     }, 2200);
