@@ -348,7 +348,11 @@ function getCtx() {
     if (!ctxCache) {
       const Ctx = window.AudioContext || window.webkitAudioContext;
       if (!Ctx) return null;
-      ctxCache = new Ctx({ latencyHint: 'playback' });
+      try {
+        ctxCache = new Ctx({ latencyHint: 'playback', sampleRate: 44100 });
+      } catch {
+        ctxCache = new Ctx({ latencyHint: 'playback' });
+      }
     }
     return ctxCache;
   } catch {
@@ -646,21 +650,6 @@ async function loadSafariVerifyAsset(role) {
     }
   }
 
-  const pair = ensureSafariVerifySlots(role);
-  for (const el of pair) {
-    configureSafariVerifyElement(el);
-    el.muted = true;
-    el.src = blobUrl;
-    el.setAttribute('data-motus-verify-blob', blobUrl);
-    try {
-      el.load();
-    } catch {
-      /* ignore */
-    }
-    await waitMediaCanPlayThrough(el, 12000).catch(() => false);
-    el.muted = true;
-  }
-
   return blobUrl;
 }
 
@@ -670,6 +659,14 @@ async function warmVerifyAudioBody() {
   const ctx = getCtx();
   if (ctx) await ensureRunning(ctx);
   await Promise.all([...VERIFY_SAMPLE_ROLES].map((role) => loadSafariVerifyAsset(role)));
+  /* Safari : pas de lecture HTML pendant la validation — évite la double sortie avec Web Audio. */
+  if (ctx?.state === 'running') {
+    try {
+      await ctx.suspend();
+    } catch {
+      /* ignore */
+    }
+  }
   safariVerifyWarmed = true;
 }
 
@@ -776,34 +773,27 @@ async function loadBufferForRole(ctx, role) {
 }
 
 async function playBufferOnce(ctx, buf) {
-  await ensureRunning(ctx);
   if (!isUsableDecodedBuffer(buf)) return;
+  await ensureRunning(ctx);
   stopActiveSafariVerifyWebSource();
   await new Promise((resolve) => {
-    let settled = false;
     const src = ctx.createBufferSource();
     const gain = ctx.createGain();
     gain.gain.value = 1;
     src.buffer = buf;
     src.connect(gain);
     gain.connect(ctx.destination);
+    activeSafariVerifySource = src;
     const finish = () => {
-      if (settled) return;
-      settled = true;
       if (activeSafariVerifySource === src) activeSafariVerifySource = null;
       resolve();
     };
-    const t0 = ctx.currentTime + 0.012;
-    activeSafariVerifySource = src;
     src.onended = finish;
     try {
-      src.start(t0);
+      src.start(ctx.currentTime + 0.002);
     } catch {
       finish();
-      return;
     }
-    /* Secours uniquement si `ended` ne vient pas (évite de couper la piste sur Safari). */
-    window.setTimeout(finish, Math.ceil(buf.duration * 1000) + 900);
   });
 }
 
@@ -1023,20 +1013,14 @@ async function playSafariVerifyBlobOnElement(el, blobUrl) {
 async function playSafariVerifyRole(role) {
   if (!isSafariBrowser()) return false;
   await warmVerifyAudio();
-  const blobUrl = safariVerifyBlobByRole.get(role);
-  if (blobUrl) {
-    const el = borrowSafariVerifyElement(role);
-    if (await playSafariVerifyBlobOnElement(el, blobUrl)) return true;
-  }
   const ctx = getCtx();
-  if (ctx) {
-    const cached = roleBuffers.get(role);
-    if (isUsableDecodedBuffer(cached)) {
-      await playBufferOnce(ctx, cached);
-      return true;
-    }
-  }
-  return playRoleSampleWebAudio(role);
+  if (!ctx) return false;
+  const cached = roleBuffers.get(role);
+  if (!isUsableDecodedBuffer(cached)) return false;
+  pauseBackgroundMediaForVerify();
+  stopActiveSafariVerifyWebSource();
+  await playBufferOnce(ctx, cached);
+  return true;
 }
 
 async function playRoleSampleWebAudio(role) {
@@ -1134,8 +1118,15 @@ export async function playVerifyLetterSound(outcome, opts = {}) {
   if (outcome !== 'correct' && outcome !== 'wrong' && outcome !== 'missing') return;
   const { index = 0, wordLen = 1, isWin = false } = opts;
   try {
+    if (isSafariBrowser() && safariVerifyWarmed) {
+      const ok = await playSafariVerifyRole(outcome);
+      if (ok) {
+        await delay(55);
+        return;
+      }
+    }
     const ctx0 = getCtx();
-    if (ctx0) await ensureRunning(ctx0);
+    if (ctx0 && !isSafariBrowser()) await ensureRunning(ctx0);
     const ok = await playRoleSample(outcome);
     if (!ok) {
       const ctx = getCtx();
@@ -1155,26 +1146,31 @@ export async function playVerifyLetterSound(outcome, opts = {}) {
   }
 }
 
+const SAFARI_VERIFY_GAP_MS = 55;
+
 /**
- * Safari : lecture séquentielle via blob: (fichier entier en RAM), pas de Web Audio planifié.
+ * Safari : buffers PCM décodés, une source Web Audio à la fois (comme Edge mais sans &lt;audio&gt;).
  * @param {string[]} results
- * @param {{ isWin?: boolean, onLetter?: (index: number, outcome: string) => void }} [opts]
+ * @param {{ onLetter?: (index: number, outcome: string) => void }} [opts]
  */
-async function playSafariVerifySequenceBlob(results, opts = {}) {
+async function playSafariVerifySequenceWebAudio(results, opts = {}) {
   const { onLetter } = opts;
   if (!results.length) return;
   await warmVerifyAudio();
   pauseBackgroundMediaForVerify();
   stopActiveSafariVerifyWebSource();
+  const ctx = getCtx();
+  if (!ctx) return;
+  await ensureRunning(ctx);
 
   for (let i = 0; i < results.length; i++) {
     const outcome = results[i];
     if (outcome !== 'correct' && outcome !== 'wrong' && outcome !== 'missing') continue;
-    const blobUrl = safariVerifyBlobByRole.get(outcome);
-    if (!blobUrl) continue;
+    const buf = roleBuffers.get(outcome);
+    if (!isUsableDecodedBuffer(buf)) continue;
+    await playBufferOnce(ctx, buf);
     if (onLetter) onLetter(i, outcome);
-    const el = borrowSafariVerifyElement(outcome);
-    await playSafariVerifyBlobOnElement(el, blobUrl);
+    await delay(SAFARI_VERIFY_GAP_MS);
   }
 }
 
@@ -1186,13 +1182,13 @@ async function playSafariVerifySequenceBlob(results, opts = {}) {
 export async function playVerifySequence(results, opts = {}) {
   const { isWin = false, onLetter } = opts;
   if (!results.length) return;
-  unlockAudioSync();
 
   if (isSafariBrowser()) {
-    await playSafariVerifySequenceBlob(results, { isWin, onLetter });
+    await playSafariVerifySequenceWebAudio(results, { onLetter });
     return;
   }
 
+  unlockAudioSync();
   const ctx = getCtx();
   if (ctx) await ensureRunning(ctx);
   for (let i = 0; i < results.length; i++) {

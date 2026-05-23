@@ -333,25 +333,14 @@ export class MotusGame {
         this.emit();
       };
 
-      if (isSafariBrowser()) {
-        this.verifyAnimating = true;
-        try {
-          await playVerifySequence(results, {
-            isWin: won,
-            onLetter: (i) => applyLetterResult(i),
-          }).catch(() => {});
-        } finally {
-          this.verifyAnimating = false;
-        }
-      } else {
-        for (let i = 0; i < this.length; i++) {
-          applyLetterResult(i);
-          await playVerifyLetterSound(results[i], {
-            index: i,
-            wordLen: this.length,
-            isWin: won,
-          }).catch(() => {});
-        }
+      this.verifyAnimating = isSafariBrowser();
+      try {
+        await playVerifySequence(results, {
+          isWin: won,
+          onLetter: (i) => applyLetterResult(i),
+        }).catch(() => {});
+      } finally {
+        this.verifyAnimating = false;
       }
 
       if (won) {
