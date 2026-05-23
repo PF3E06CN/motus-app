@@ -6,7 +6,7 @@ import {
   playVerifyLetterSound,
   playWinFanfare,
   unlockAudioSync,
-  warmIOSVerifyAudio,
+  warmVerifyAudio,
 } from './sounds.js';
 
 const AZERTY_ROWS = [
@@ -273,7 +273,7 @@ export class MotusGame {
 
   async submit() {
     unlockAudioSync();
-    void warmIOSVerifyAudio().catch(() => {});
+    void warmVerifyAudio().catch(() => {});
     if (this.winBallPhase) return;
     if (this.inputLocked) {
       this.message = 'Correction en cours…';

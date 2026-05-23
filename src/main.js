@@ -7,8 +7,9 @@ import {
 import { MotusGame, AZERTY_ROWS } from './game.js';
 import {
   isIOSDevice,
+  isSafariBrowser,
   primeAudioContext,
-  warmIOSVerifyAudio,
+  warmVerifyAudio,
   unlockAudioSync,
   clearDecodedSoundCache,
   playErrorBuzz,
@@ -24,6 +25,7 @@ import {
   playGridMotusLineSound,
   playHtmlAudioById,
   wirePlateauAudioElementsFromSfx,
+  wireVerifyAudioElementsFromSfx,
   GAME_SFX,
 } from './sounds.js';
 
@@ -439,6 +441,7 @@ function refreshDebugPanel() {
 
 function initMenu() {
   wirePlateauAudioElementsFromSfx();
+  wireVerifyAudioElementsFromSfx();
   const hideSfxBtn = $('#debug-snd-grid-hide');
   if (hideSfxBtn && GAME_SFX.plateauHideEight) {
     hideSfxBtn.disabled = false;
@@ -464,8 +467,8 @@ function initMenu() {
   $('#btn-play').addEventListener('click', async () => {
     closeAllOverlays();
     unlockAudioSync();
-    /* iOS : pas de prime des sons « validation » au Jouer (sinon verify-correct peut se lancer à l’intro plateau). */
-    if (!isIOSDevice()) {
+    /* Safari : pas de prime avec play() au Jouer (fugue verify-wrong + intro plateau). */
+    if (!isIOSDevice() && !isSafariBrowser()) {
       void primeAudioContext().catch(() => {});
     }
     await startGame();
@@ -1392,8 +1395,10 @@ function bindControls() {
   $('#btn-submit').addEventListener('click', () => {
     if (!motus || !isLetterGridActive(motus)) return;
     unlockAudioSync();
-    void primeAudioContext().catch(() => {});
-    void warmIOSVerifyAudio().catch(() => {});
+    void warmVerifyAudio().catch(() => {});
+    if (!isSafariBrowser()) {
+      void primeAudioContext().catch(() => {});
+    }
     void motus.submit().then(() => focusWordPlaySurface());
   });
   $('#btn-delete').addEventListener('click', () => motus?.deleteLetter());
@@ -1478,7 +1483,7 @@ function bindMenuGeneriqueListener() {
     lastMenuAudioUiAt = now;
     unlockAudioSync();
     const gen = document.getElementById('motus-snd-generique');
-    if (gen instanceof HTMLAudioElement && gen.paused && !isIOSDevice()) {
+    if (gen instanceof HTMLAudioElement && gen.paused && !isIOSDevice() && !isSafariBrowser()) {
       void primeAudioContext().catch(() => {});
     }
     syncMenuGenerique();

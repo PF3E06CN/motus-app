@@ -262,7 +262,7 @@ function delay(ms) {
 }
 
 /** Safari desktop coupe les MP3 si on relance la même balise en rafale. */
-function isSafariBrowser() {
+export function isSafariBrowser() {
   if (typeof navigator === 'undefined') return false;
   const ua = navigator.userAgent;
   return /Safari/i.test(ua) && !/Chrome|Chromium|CriOS|EdgiOS|FxiOS|OPR\//i.test(ua);
@@ -423,6 +423,14 @@ function getOrCreateHtmlAudio(role) {
   const id = ROLE_TO_HTML_ID[role];
   const fromDom = id ? /** @type {HTMLAudioElement | null} */ (document.getElementById(id)) : null;
   if (fromDom) {
+    if (!fromDom.currentSrc && !fromDom.getAttribute('src')) {
+      const list = candidateHrefsForRole(role);
+      htmlSrcIndex.set(role, 0);
+      if (list[0]) {
+        fromDom.src = list[0];
+        wireDynamicSrcFallback(fromDom, role);
+      }
+    }
     htmlByRole.set(role, fromDom);
     return fromDom;
   }
@@ -511,7 +519,8 @@ export function unlockAudioSync() {
  */
 async function primeHtmlAudioElement(el, opts = {}) {
   const { keepMuted = false } = opts;
-  if (isIOSDevice()) {
+  /* Safari : jamais play() au prime — évite une fugue audible (souvent verify-wrong) au chargement / Jouer. */
+  if (isIOSDevice() || isSafariBrowser()) {
     el.muted = true;
     if (el.readyState < HTMLMediaElement.HAVE_METADATA) {
       try {
@@ -550,7 +559,7 @@ export async function primeAudioContext() {
     for (const role of ROLES) {
       const el = getOrCreateHtmlAudio(role);
       const isVerify = VERIFY_SAMPLE_ROLES.has(role);
-      if (isIOSDevice() && isVerify) continue;
+      if (isSafariBrowser() && isVerify) continue;
       await primeHtmlAudioElement(el, { keepMuted: isVerify });
       await delay(12);
     }
@@ -572,6 +581,45 @@ export async function primeAudioContext() {
 /**
  * Précharge iOS (load uniquement, jamais play) — à appeler après un geste utilisateur.
  */
+/**
+ * Précharge les sons de validation (Safari : load / decode uniquement, sans play).
+ */
+export async function warmVerifyAudio() {
+  if (isIOSDevice()) {
+    await warmIOSVerifyAudio();
+    return;
+  }
+  if (!isSafariBrowser()) return;
+  unlockAudioSync();
+  const ctx = getCtx();
+  if (ctx) {
+    await ensureRunning(ctx);
+    for (const role of VERIFY_SAMPLE_ROLES) {
+      await loadBufferForRole(ctx, role);
+    }
+  }
+  for (const role of VERIFY_SAMPLE_ROLES) {
+    const id = ROLE_TO_HTML_ID[role];
+    const el = id ? document.getElementById(id) : null;
+    if (!(el instanceof HTMLAudioElement)) continue;
+    const href = hrefForVerifyRole(role);
+    if (!href) continue;
+    el.muted = true;
+    const prev = el.getAttribute('data-motus-verify-href');
+    if (prev !== href) {
+      el.setAttribute('data-motus-verify-href', href);
+      el.src = href;
+      try {
+        el.load();
+      } catch {
+        /* ignore */
+      }
+    }
+    await waitMediaCanPlayThrough(el, 10000).catch(() => false);
+    el.muted = true;
+  }
+}
+
 export async function warmIOSVerifyAudio() {
   if (!isIOSDevice() || iosVerifyWarmed) return;
   iosVerifyWarmed = true;
@@ -882,9 +930,9 @@ async function playRoleSample(role) {
   }
 
   if (desktopSafariVerify) {
-    if (await playRoleSampleWebAudio(role)) return true;
     const bases = ROLE_TO_BASES[role];
     if (await playVerifySampleFromBases(bases)) return true;
+    if (await playRoleSampleWebAudio(role)) return true;
     return false;
   }
 
@@ -937,7 +985,7 @@ const BLIP = 0.09;
  * Les « bien placés » ont un délai plus long : ils arrivent souvent plusieurs fois d’affilée.
  */
 function pauseAfterVerifyOutcome(_outcome) {
-  return isIOSDevice() ? 60 : 25;
+  return isSafariBrowser() ? 85 : 25;
 }
 
 /**
@@ -982,12 +1030,8 @@ export async function playVerifySequence(results, opts = {}) {
   const ctx = getCtx();
   if (ctx) {
     await ensureRunning(ctx);
-    if (isIOSDevice()) {
-      await warmIOSVerifyAudio().catch(() => {});
-    } else if (isSafariBrowser()) {
-      for (const role of VERIFY_SAMPLE_ROLES) {
-        await loadBufferForRole(ctx, role);
-      }
+    if (isSafariBrowser()) {
+      await warmVerifyAudio().catch(() => {});
     }
   }
   for (let i = 0; i < results.length; i++) {
@@ -1132,6 +1176,19 @@ const PLATEAU_TAIL_SILENCE_MS = 44;
 
 function plateauEffectConfigured(bases, domId) {
   return bases.length > 0 || !!domId;
+}
+
+/** Évite le preload Safari des MP3 de validation au chargement de la page. */
+export function wireVerifyAudioElementsFromSfx() {
+  for (const role of VERIFY_SAMPLE_ROLES) {
+    const id = ROLE_TO_HTML_ID[role];
+    const el = id ? document.getElementById(id) : null;
+    if (!(el instanceof HTMLAudioElement)) continue;
+    el.preload = 'none';
+    el.muted = true;
+    el.removeAttribute('src');
+    el.removeAttribute('data-motus-verify-href');
+  }
 }
 
 /** Aligne les balises &lt;audio&gt; plateau sur {@link GAME_SFX} (jamais 6.mp3 / 7.mp3 voix). */
