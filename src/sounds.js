@@ -67,17 +67,18 @@ let ctxCache = null;
 const roleBuffers = new Map();
 
 /**
- * URL absolue des fichiers sous `public/sounds/` (fetch + optionnellement aligné avec le HTML).
+ * URL absolue des MP3 (`public/sounds/` en dev Python → servi comme `/sounds/` ; build Vite → `dist/sounds/`).
  * @param {string} filename ex. `verify-correct.mp3`
  */
 export function soundHref(filename) {
   const baseHref =
     (typeof import.meta !== 'undefined' && import.meta.env?.BASE_URL) || './';
+  const path = `sounds/${filename}`;
   try {
     const base = new URL(baseHref, window.location.href);
-    return new URL(`public/sounds/${filename}`, base).href;
+    return new URL(path, base).href;
   } catch {
-    return `./public/sounds/${filename}`;
+    return `${baseHref}${path}`.replace(/([^:]\/)\/+/g, '$1');
   }
 }
 

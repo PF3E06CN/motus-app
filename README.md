@@ -2,6 +2,26 @@
 
 Jeu de mots inspiré de [motusJS](https://github.com/difabiolorenzo/motusJS) et de l'émission **Motus** (France Télévisions).
 
+## Jouer en ligne (GitHub Pages)
+
+Une fois le déploiement activé sur le dépôt :
+
+**https://pf3e06cn.github.io/motus-app/**
+
+1. Sur GitHub : **Settings** → **Pages** → **Build and deployment** → source **GitHub Actions** (recommandé).
+2. Poussez le dépôt (`git push`) : le workflow *Deploy GitHub Pages* build et publie automatiquement.
+
+**Déploiement manuel** (si le push du workflow est refusé) :
+
+```bash
+npm install
+npm run deploy:pages
+```
+
+Puis **Settings** → **Pages** → source **Deploy from a branch** → branche `gh-pages` → dossier `/ (root)`.
+
+Connexion Internet requise pour charger les dictionnaires (motusJS).
+
 ## Lancer
 
 **Sans installation** (Python) :

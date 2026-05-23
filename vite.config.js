@@ -45,7 +45,10 @@ function motusReponseDevPlugin() {
   };
 }
 
+/** GitHub Pages : https://PF3E06CN.github.io/motus-app/ */
+const pagesBase = process.env.GITHUB_PAGES === 'true' ? '/motus-app/' : './';
+
 export default defineConfig({
-  base: './',
+  base: pagesBase,
   plugins: [motusReponseDevPlugin()],
 });
