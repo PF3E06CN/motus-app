@@ -73,7 +73,7 @@ Configurés dans `GAME_SFX` (`src/sounds.js`) :
 | `wordWin` | `word-win.mp3` | Mot trouvé |
 | `menuGenerique` | `generique.mp3` | Musique menu |
 
-Fichiers présents mais **non branchés** tant que non confirmés : `Lettre-Bonus.mp3`, `Timeout.mp3`, `no-more-try.mp3`, `mot-not-nound.mp3`.
+Fichiers présents mais **non branchés** tant que non confirmés : `no-more-try.mp3`.
 
 Pour assigner le masquage des 8 cases : dans `sounds.js`, `GAME_SFX.plateauHideEight = 'NomDuFichier'` (sans `.mp3`).
 

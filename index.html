@@ -82,6 +82,66 @@
       </nav>
 
       <section id="menu" class="panel hidden">
+        <h2>Mode de jeu</h2>
+        <div class="mode-picker" id="mode-picker" role="radiogroup" aria-label="Mode de jeu">
+          <button type="button" class="mode-btn active" data-mode="solo" aria-pressed="true">Solo</button>
+          <button type="button" class="mode-btn" data-mode="team" aria-pressed="false">Équipe</button>
+        </div>
+
+        <div id="team-options" class="team-options hidden" aria-hidden="true">
+          <h2>Équipes</h2>
+          <div class="team-size-picker" id="team-size-picker" role="radiogroup" aria-label="Nombre d'équipes"></div>
+
+          <h2 class="team-options-sub">Comportement après une erreur</h2>
+          <label class="menu-field" for="team-error-behavior">
+            <span class="menu-field-label">Essai perdu (mot invalide, incomplet…)</span>
+            <select id="team-error-behavior" class="menu-select">
+              <option value="replace-bonus">Remplacer la ligne + lettre bonus</option>
+              <option value="replace">Remplacer la ligne</option>
+              <option value="add-bonus">Ajouter une ligne + lettre bonus</option>
+              <option value="add">Ajouter une ligne</option>
+            </select>
+          </label>
+
+          <p class="hint team-hint">
+            Chaque équipe a son score et sa grille de chiffres. Les équipes se relaient à chaque essai validé.
+          </p>
+        </div>
+
+        <h2>Chrono</h2>
+        <label class="menu-field menu-field--checkbox" for="turn-timer-enabled">
+          <input type="checkbox" id="turn-timer-enabled" />
+          <span>Activer le chrono par tour</span>
+        </label>
+        <label class="menu-field" for="turn-timer-seconds">
+          <span class="menu-field-label">Durée par tour</span>
+          <select id="turn-timer-seconds" class="menu-select" disabled>
+            <option value="8" selected>8 secondes</option>
+            <option value="10">10 secondes</option>
+            <option value="15">15 secondes</option>
+            <option value="20">20 secondes</option>
+            <option value="30">30 secondes</option>
+          </select>
+        </label>
+        <p class="hint timer-hint">
+          Temps écoulé : passage à l’équipe suivante (équipe) ou essai perdu (solo).
+        </p>
+
+        <h2>Partie</h2>
+        <label class="menu-field" for="words-per-session">
+          <span class="menu-field-label">Nombre de mots à jouer</span>
+          <select id="words-per-session" class="menu-select">
+            <option value="8">8 mots</option>
+            <option value="10">10 mots</option>
+            <option value="12">12 mots</option>
+            <option value="15">15 mots</option>
+            <option value="0" selected>Illimité</option>
+          </select>
+        </label>
+        <p class="hint words-session-hint">
+          Chaque mot compte (trouvé ou non). À la fin du quota, récapitulatif puis retour possible au menu.
+        </p>
+
         <h2>Nombre de lettres</h2>
         <div class="length-picker" id="length-picker"></div>
         <button type="button" class="btn btn-primary" id="btn-play">Jouer</button>
@@ -92,17 +152,19 @@
         <div class="game-top">
           <div class="game-top-left">
             <button type="button" class="btn btn-ghost" id="btn-menu" aria-label="Menu">☰</button>
-            <div
-              id="motus-score-group"
-              class="motus-score"
-              role="group"
-              aria-label="Score plateau : 0 points"
-            >
-              <span class="motus-score-label">Pts</span>
-              <div class="motus-score-cells">
-                <span class="motus-score-cell" id="motus-score-d0">0</span>
-                <span class="motus-score-cell" id="motus-score-d1">0</span>
-                <span class="motus-score-cell" id="motus-score-d2">0</span>
+            <div id="motus-scores" class="motus-scores">
+              <div
+                id="motus-score-group"
+                class="motus-score motus-score--solo"
+                role="group"
+                aria-label="Score plateau : 0 points"
+              >
+                <span class="motus-score-label">Pts</span>
+                <div class="motus-score-cells">
+                  <span class="motus-score-cell" id="motus-score-d0">0</span>
+                  <span class="motus-score-cell" id="motus-score-d1">0</span>
+                  <span class="motus-score-cell" id="motus-score-d2">0</span>
+                </div>
               </div>
             </div>
           </div>
@@ -115,14 +177,15 @@
               alt=""
             />
           </div>
-          <span class="attempts-label" id="attempts-label"></span>
-          <div class="game-top-right">
-            <button type="button" class="btn btn-ghost" id="btn-new" title="Nouveau mot">↻</button>
+          <div class="game-top-meta">
+            <span id="word-progress" class="word-progress hidden" aria-live="polite"></span>
+            <span class="attempts-label" id="attempts-label"></span>
+            <span id="turn-timer" class="turn-timer hidden" aria-live="polite" aria-label="Temps restant"></span>
           </div>
         </div>
 
         <div id="ball-draw" class="ball-draw win-ball-draw hidden" aria-live="polite">
-          <p class="ball-draw-title">Grille Motus</p>
+          <p id="ball-draw-title" class="ball-draw-title">Grille Motus</p>
           <div id="ball-motus-grid" class="ball-motus-grid" role="grid" aria-label="Grille 5 par 5 des numéros"></div>
           <div class="win-ball-slots">
             <div class="win-ball-slot" id="win-ball-slot-0">
@@ -180,7 +243,7 @@
       <!-- Panneaux type motusJS (Règles / Paramètres / Crédits) -->
       <section id="overlay-aide" class="app-overlay hidden" aria-hidden="true">
         <div class="app-overlay-backdrop" data-close-overlay tabindex="-1"></div>
-        <div class="app-overlay-card" role="document">
+        <div class="app-overlay-card app-overlay-card--rules" role="document">
           <div class="app-overlay-top">
             <button type="button" class="btn-overlay-back" data-close-overlay aria-label="Retour">🡰</button>
             <h2 class="app-overlay-title">Règles</h2>
@@ -200,29 +263,31 @@
             <h3 class="app-overlay-h3">Signification des couleurs</h3>
             <p class="rules-after-try">Après validation, chaque lettre de votre essai est colorée :</p>
 
-            <ul class="rules-legend" aria-label="Légende des couleurs">
-              <li class="rules-legend-item">
-                <span class="rules-cell rules-cell--correct" aria-hidden="true">A</span>
-                <span><strong>Rouge</strong> — la lettre est au <strong>bon endroit</strong>.</span>
-              </li>
-              <li class="rules-legend-item">
-                <span class="rules-cell rules-cell--wrong" aria-hidden="true">T</span>
-                <span><strong>Jaune</strong> — la lettre est dans le mot, mais <strong>pas à cette place</strong>.</span>
-              </li>
-              <li class="rules-legend-item">
-                <span class="rules-cell rules-cell--missing" aria-hidden="true">Z</span>
-                <span><strong>Bleu</strong> — la lettre n’est <strong>pas dans le mot</strong>.</span>
-              </li>
-            </ul>
+            <div class="rules-panel">
+              <ul class="rules-legend" aria-label="Légende des couleurs">
+                <li class="rules-legend-item">
+                  <span class="rules-cell rules-cell--correct" aria-hidden="true">A</span>
+                  <span><strong>Rouge</strong> — la lettre est au <strong>bon endroit</strong>.</span>
+                </li>
+                <li class="rules-legend-item">
+                  <span class="rules-cell rules-cell--wrong" aria-hidden="true">T</span>
+                  <span><strong>Jaune</strong> — la lettre est dans le mot, mais <strong>pas à cette place</strong>.</span>
+                </li>
+                <li class="rules-legend-item">
+                  <span class="rules-cell rules-cell--missing" aria-hidden="true">Z</span>
+                  <span><strong>Bleu</strong> — la lettre n’est <strong>pas dans le mot</strong>.</span>
+                </li>
+              </ul>
 
-            <div class="rules-example" aria-hidden="true">
-              <p class="rules-example-label">Exemple après un essai</p>
-              <div class="rules-example-row">
-                <span class="rules-cell rules-cell--correct">M</span>
-                <span class="rules-cell rules-cell--wrong">O</span>
-                <span class="rules-cell rules-cell--missing">T</span>
-                <span class="rules-cell rules-cell--missing">U</span>
-                <span class="rules-cell rules-cell--correct">S</span>
+              <div class="rules-example">
+                <p class="rules-example-label">Exemple après un essai</p>
+                <div class="rules-example-row" aria-hidden="true">
+                  <span class="rules-cell rules-cell--correct">M</span>
+                  <span class="rules-cell rules-cell--wrong">O</span>
+                  <span class="rules-cell rules-cell--missing">T</span>
+                  <span class="rules-cell rules-cell--missing">U</span>
+                  <span class="rules-cell rules-cell--correct">S</span>
+                </div>
               </div>
             </div>
 
@@ -231,7 +296,8 @@
             </p>
 
             <p class="app-overlay-muted rules-note">
-              Mot incomplet, inconnu ou non admis par le dictionnaire : l’essai est perdu.
+              Mot incomplet, inconnu, <strong>déjà proposé</strong> ou non admis par le dictionnaire : l’essai est
+              perdu.
             </p>
           </div>
         </div>

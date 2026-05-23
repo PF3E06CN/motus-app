@@ -4,12 +4,23 @@ import { writeReponseFile } from './dev-reponse.js';
 import {
   isSafariBrowser,
   playErrorBuzz,
+  playLetterBonusSound,
+  playTimeoutSound,
+  playWordNotFoundSound,
   playVerifyLetterSound,
   playVerifySequence,
   playWinFanfare,
   unlockAudioSync,
   warmVerifyAudio,
 } from './sounds.js';
+
+/** Durée du clignotement apparition / disparition de la lettre bonus. */
+const BONUS_LETTER_BLINK_MS = 1250;
+const BONUS_LETTER_BLINK_STEP_MS = 180;
+
+function delayMs(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
 
 const AZERTY_ROWS = [
   'AZERTYUIOP',
@@ -46,13 +57,109 @@ export class MotusGame {
     this.winBallPhase = false;
     /** Safari : mise à jour légère de la grille pendant les sons de validation. */
     this.verifyAnimating = false;
+    this.teamMode = false;
+    this.teamSize = 1;
+    this.currentTeamIndex = 0;
+    this.teamOnErrorBehavior = 'add-bonus';
+    this.turnTimerEnabled = false;
+    this.turnTimerSeconds = 8;
+    /** Colonne en cours de révélation bonus (-1 = aucune). */
+    this.bonusRevealCol = -1;
+    this.bonusRevealBlinking = false;
+    this.bonusRevealVisible = true;
   }
 
-  async start(length) {
+  configureTeam(
+    { teamMode = false, teamSize = 2, teamOnErrorBehavior = 'add-bonus' } = {},
+    { resetHand = true } = {}
+  ) {
+    this.teamMode = !!teamMode;
+    this.teamSize = this.teamMode ? Math.min(4, Math.max(2, teamSize)) : 1;
+    const legacy = {
+      'relay-bonus': 'add-bonus',
+      relay: 'add',
+      stay: 'replace',
+    };
+    const normalized = legacy[teamOnErrorBehavior] ?? teamOnErrorBehavior;
+    const allowed = new Set(['replace-bonus', 'replace', 'add-bonus', 'add']);
+    this.teamOnErrorBehavior = allowed.has(normalized) ? normalized : 'add-bonus';
+    if (resetHand) this.currentTeamIndex = 0;
+  }
+
+  getCurrentTeamName() {
+    return `Équipe ${this.currentTeamIndex + 1}`;
+  }
+
+  advanceTeam() {
+    if (!this.teamMode) return;
+    this.currentTeamIndex = (this.currentTeamIndex + 1) % this.teamSize;
+  }
+
+  /** Première lettre encore inconnue (index), sans l’afficher. */
+  findFirstBonusLetterIndex() {
+    for (let i = 0; i < this.length; i++) {
+      if (this.placement[i] !== 'correct') return i;
+    }
+    return -1;
+  }
+
+  /** Alterne affichage / masquage de la lettre bonus pendant {@link BONUS_LETTER_BLINK_MS}. */
+  async runBonusLetterBlink() {
+    this.bonusRevealBlinking = true;
+    this.bonusRevealVisible = true;
+    this.emit();
+
+    const steps = Math.ceil(BONUS_LETTER_BLINK_MS / BONUS_LETTER_BLINK_STEP_MS);
+    for (let i = 0; i < steps; i++) {
+      await delayMs(BONUS_LETTER_BLINK_STEP_MS);
+      this.bonusRevealVisible = !this.bonusRevealVisible;
+      this.emit();
+    }
+
+    this.bonusRevealBlinking = false;
+    this.bonusRevealVisible = true;
+    this.emit();
+  }
+
+  /** Révèle la lettre bonus (clignote 1,25 s + son), puis reprend la saisie. */
+  async grantBonusLetterWithReveal() {
+    const idx = this.findFirstBonusLetterIndex();
+    if (idx < 0) return;
+
+    this.placement[idx] = 'correct';
+    const row = this.getActiveRow();
+    if (row) {
+      row.letters[idx] = this.target[idx];
+      row.states[idx] = 'given';
+    }
+    this.bonusRevealCol = idx;
+    this.inputLocked = true;
+    this.emit();
+
+    await Promise.all([
+      this.runBonusLetterBlink(),
+      playLetterBonusSound().catch(() => {}),
+    ]);
+
+    this.bonusRevealCol = -1;
+    if (this.nextTypeCol <= idx) {
+      this.nextTypeCol = Math.min(idx + 1, this.length);
+      this.initCursor();
+    }
+    this.inputLocked = false;
+    this.emit();
+  }
+
+  async start(length, options = {}) {
     this.loading = true;
     this.emit();
     this.length = length;
     this.maxAttempts = length;
+    const preserveHand = options.preserveTeamHand === true;
+    this.configureTeam(options, { resetHand: !preserveHand });
+    this.turnTimerEnabled = !!options.turnTimerEnabled;
+    const tSec = Number(options.turnTimerSeconds) || 8;
+    this.turnTimerSeconds = Math.max(8, Math.min(30, tSec));
     const { targets, verify } = await loadDictionaries(length);
     this.targets = targets;
     this.verifySet = verify;
@@ -84,6 +191,9 @@ export class MotusGame {
     this.finished = false;
     this.inputLocked = false;
     this.winBallPhase = false;
+    this.bonusRevealCol = -1;
+    this.bonusRevealBlinking = false;
+    this.bonusRevealVisible = true;
     this.newRow();
   }
 
@@ -140,6 +250,7 @@ export class MotusGame {
       states: Array(this.length).fill('empty'),
     });
     const row = this.rows[this.currentRow];
+    row.teamIndex = this.teamMode ? this.currentTeamIndex : 0;
 
     for (let i = 0; i < this.length; i++) {
       if (this.isPrefilledCol(i)) {
@@ -217,22 +328,125 @@ export class MotusGame {
     return this.getActiveRow().letters.join('');
   }
 
+  /** Mot déjà validé sur une ligne précédente (hors essais rejetés « invalid »). */
+  wasAlreadyProposed(guess) {
+    const word = guess.toUpperCase();
+    for (let r = 0; r < this.currentRow; r++) {
+      const row = this.rows[r];
+      if (!row || row.states.some((s) => s === 'invalid')) continue;
+      if (row.letters.join('').toUpperCase() === word) return true;
+    }
+    return false;
+  }
+
+  /** Réinitialise la ligne d’essai en cours (même numéro d’essai). */
+  async replaceCurrentAttempt({ grantBonus = false } = {}) {
+    const row = this.getActiveRow();
+    if (!row) return;
+    for (let i = 0; i < this.length; i++) {
+      if (this.isPrefilledCol(i)) {
+        row.letters[i] = this.target[i];
+        row.states[i] = 'given';
+      } else {
+        row.letters[i] = '';
+        row.states[i] = 'empty';
+      }
+    }
+    this.nextTypeCol = 0;
+    while (this.nextTypeCol < this.length && this.isPrefilledCol(this.nextTypeCol)) {
+      this.nextTypeCol++;
+    }
+    this.initCursor();
+    if (grantBonus) await this.grantBonusLetterWithReveal();
+    this.message = '';
+    this.emit();
+  }
+
+  async handleTeamRelayAttempt(grantBonus) {
+    const row = this.getActiveRow();
+    if (row) {
+      for (let i = 0; i < this.length; i++) {
+        row.states[i] = 'invalid';
+      }
+    }
+    this.advanceTeam();
+    await this.goToNextAttempt({
+      skipTeamAdvance: true,
+      grantBonus,
+    });
+  }
+
+  async handleTeamErrorAttempt() {
+    const behavior = this.teamOnErrorBehavior;
+    if (behavior === 'replace-bonus') {
+      await this.replaceCurrentAttempt({ grantBonus: true });
+      return;
+    }
+    if (behavior === 'replace') {
+      await this.replaceCurrentAttempt({ grantBonus: false });
+      return;
+    }
+    await this.handleTeamRelayAttempt(behavior === 'add-bonus');
+  }
+
+  /** Temps écoulé en équipe : relais + règle du menu (dont lettre bonus si configurée). */
+  async handleTeamTimeoutAttempt() {
+    const behavior = this.teamOnErrorBehavior;
+    if (behavior === 'replace-bonus') {
+      this.advanceTeam();
+      await this.replaceCurrentAttempt({ grantBonus: true });
+      return;
+    }
+    if (behavior === 'replace') {
+      this.advanceTeam();
+      await this.replaceCurrentAttempt({ grantBonus: false });
+      return;
+    }
+    await this.handleTeamRelayAttempt(behavior === 'add-bonus');
+  }
+
+  async handleTurnTimeout() {
+    if (this.finished || this.loading || this.winBallPhase || this.inputLocked) return;
+    unlockAudioSync();
+    this.inputLocked = true;
+    const playedTimeout = await playTimeoutSound().catch(() => false);
+    if (!playedTimeout) await playErrorBuzz().catch(() => {});
+
+    if (this.teamMode) {
+      this.message = 'Temps écoulé — à l’équipe suivante.';
+      await this.handleTeamTimeoutAttempt();
+      this.inputLocked = false;
+      this.emit();
+      return;
+    }
+    this.inputLocked = false;
+    this.rejectAttempt('Temps écoulé — essai perdu.');
+  }
+
   rejectAttempt(message) {
     this.message = message;
+    if (this.teamMode) {
+      void this.handleTeamErrorAttempt();
+      return;
+    }
     const row = this.getActiveRow();
     for (let i = 0; i < this.length; i++) {
       row.states[i] = 'invalid';
     }
-    this.goToNextAttempt();
+    void this.goToNextAttempt();
   }
 
-  goToNextAttempt() {
+  async goToNextAttempt({ skipTeamAdvance = false, grantBonus = false } = {}) {
     this.currentRow++;
     if (this.currentRow >= this.maxAttempts) {
       void this.finishWithLoss();
       return;
     }
+    if (this.teamMode && !skipTeamAdvance) {
+      this.advanceTeam();
+    }
     this.newRow();
+    if (grantBonus) await this.grantBonusLetterWithReveal();
     this.message = '';
     this.emit();
   }
@@ -245,9 +459,6 @@ export class MotusGame {
     this.finished = true;
     this.message = 'Mot non trouvé…';
     this.emit();
-
-    await playErrorBuzz().catch(() => {});
-    await new Promise((r) => setTimeout(r, 200));
 
     for (let i = 0; i < this.length; i++) {
       row.letters[i] = '';
@@ -266,6 +477,9 @@ export class MotusGame {
         isWin: false,
       }).catch(() => {});
     }
+
+    const playedNotFound = await playWordNotFoundSound().catch(() => false);
+    if (!playedNotFound) await playErrorBuzz().catch(() => {});
 
     this.message = '';
     this.inputLocked = false;
@@ -321,6 +535,12 @@ export class MotusGame {
       return;
     }
 
+    if (this.wasAlreadyProposed(guess)) {
+      if (!isLastAttempt) await playErrorBuzz().catch(() => {});
+      this.rejectAttempt('Mot déjà proposé — essai perdu.');
+      return;
+    }
+
     this.message = '';
     const results = evaluateGuess(guess, this.target);
     const won = guess === this.target;
@@ -359,7 +579,7 @@ export class MotusGame {
         return;
       }
 
-      this.goToNextAttempt();
+      await this.goToNextAttempt();
     } finally {
       this.inputLocked = false;
       if (!this.finished && !this.winBallPhase && this.getActiveRow()) {

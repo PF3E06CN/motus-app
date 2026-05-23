@@ -65,7 +65,11 @@ const gridEl = $('#grid');
 const ballDrawEl = $('#ball-draw');
 const keyboardEl = $('#keyboard');
 const messageEl = $('#message');
+const ballDrawTitleEl = $('#ball-draw-title');
 const attemptsLabel = $('#attempts-label');
+const wordProgressEl = $('#word-progress');
+const turnTimerEl = $('#turn-timer');
+const motusScoresEl = $('#motus-scores');
 const modal = $('#modal');
 const modalTitle = $('#modal-title');
 const modalWord = $('#modal-word');
@@ -77,6 +81,18 @@ const overlayDebug = $('#overlay-debug');
 const navOverlays = [overlayAide, overlaySettings, overlayCredits, overlayDebug];
 
 let selectedLength = 6;
+/** @type {'solo' | 'team'} */
+let playMode = 'solo';
+let teamPlayerCount = 2;
+/** @type {'replace-bonus' | 'replace' | 'add-bonus' | 'add'} */
+let teamErrorBehavior = 'add-bonus';
+let turnTimerEnabled = false;
+let turnTimerSeconds = 8;
+/** 0 = illimité (comportement « mot suivant » sans fin de partie automatique). */
+let wordsPerSession = 0;
+let sessionWordsCompleted = 0;
+let sessionWordsWon = 0;
+let sessionWordsLost = 0;
 let motus = null;
 /** Au chargement `false` : le panneau #menu (longueurs + Jouer) est masqué. Passe à `true` au premier « Jouer » dans la barre du haut. */
 let playMenuRevealed = false;
@@ -92,8 +108,26 @@ let gameSessionEpoch = 0;
 let lastCastAnnouncedTarget = '';
 /** Tirage plateau après victoire en cours (évite les courses avec render). */
 let winBallDrawInFlight = false;
+/** Équipe dont la grille est présentée au démarrage (-1 = hors séquence d’intro). */
+let openingPlateauTeamIndex = -1;
+let turnTimerIntervalId = null;
+let turnTimerDeadline = 0;
+let turnTimerToken = 0;
+let turnTimerLastKey = '';
+let turnTimerHandling = false;
+/** Chrono en pause tant que la voix de la 1ʳᵉ lettre n’a pas fini. */
+let turnTimerCastBlocked = false;
+let turnTimerCastBlockToken = 0;
+
 function shouldAbortPlateauSession(epochSnap) {
   return epochSnap != null && epochSnap !== gameSessionEpoch;
+}
+
+function ballDrawTitleForTeam(teamIndex) {
+  if (motus?.teamMode && motus.teamSize > 1) {
+    return `Grille Motus équipe ${teamIndex + 1}`;
+  }
+  return 'Grille Motus';
 }
 
 /** Grille de lettres visible et partie mot en cours (pas le plateau chiffres). */
@@ -164,15 +198,36 @@ function focusWordPlaySurface() {
   }
 }
 
+/** Bloque le chrono jusqu’à la fin de la promesse (voix 1ʳᵉ lettre). */
+function blockTurnTimerForCast(promise) {
+  if (!promise) return;
+  turnTimerCastBlocked = true;
+  stopTurnTimer();
+  const token = ++turnTimerCastBlockToken;
+  void Promise.resolve(promise).finally(() => {
+    if (token !== turnTimerCastBlockToken) return;
+    turnTimerCastBlocked = false;
+    if (motus) syncTurnTimer(motus);
+  });
+}
+
+/** Annonce la 1ʳᵉ lettre ; le chrono attend la fin du son. */
+function announceCastLetterForTarget(target) {
+  if (!target) return Promise.resolve(false);
+  const p = announceWordGridFromTarget(target).then((ok) => {
+    if (ok && motus?.target === target) lastCastAnnouncedTarget = target;
+    return ok;
+  });
+  blockTurnTimerForCast(p);
+  return p;
+}
+
 /** Voix de la 1re lettre — repli si l’annonce auto après l’intro a été bloquée. */
 function tryAnnounceCastLetterOnInput() {
   const game = motus;
   if (!game?.target || game.loading || game.winBallPhase) return;
   if (game.target === lastCastAnnouncedTarget) return;
-  const target = game.target;
-  void announceWordGridFromTarget(target).then((ok) => {
-    if (ok && motus?.target === target) lastCastAnnouncedTarget = target;
-  });
+  void announceCastLetterForTarget(game.target);
 }
 
 function scheduleCastLetterOnGesture() {
@@ -292,28 +347,88 @@ function restartMenuGenerique() {
 
 /** Points plateau (mot trouvé / ligne Motus complète). */
 const SCORE_WORD_FOUND = 50;
+const SCORE_WORD_FOUND_LAST = 100;
 const SCORE_MOTUS_LINE = 100;
-let sessionMotusScore = 0;
+/** @type {number[]} */
+let teamScores = [0];
 
-function resetSessionMotusScore() {
-  sessionMotusScore = 0;
+function resetSessionMotusScore(teamCount = 1) {
+  teamScores = Array.from({ length: teamCount }, () => 0);
+  ensureTeamScoreDom(teamCount);
   updateMotusScoreDom();
 }
 
-function addSessionMotusScore(delta) {
-  sessionMotusScore = Math.max(0, sessionMotusScore + delta);
+function addSessionMotusScore(delta, teamIndex = 0) {
+  if (!teamScores[teamIndex]) teamScores[teamIndex] = 0;
+  teamScores[teamIndex] = Math.max(0, teamScores[teamIndex] + delta);
   updateMotusScoreDom();
+}
+
+function ensureTeamScoreDom(teamCount) {
+  if (!motusScoresEl) return;
+  const isTeam = teamCount > 1;
+  motusScoresEl.classList.toggle('motus-scores--team', isTeam);
+  if (!isTeam) {
+    motusScoresEl.innerHTML = `
+      <div id="motus-score-group" class="motus-score motus-score--solo" role="group" aria-label="Score plateau : 0 points">
+        <span class="motus-score-label">Pts</span>
+        <div class="motus-score-cells">
+          <span class="motus-score-cell" id="motus-score-d0">0</span>
+          <span class="motus-score-cell" id="motus-score-d1">0</span>
+          <span class="motus-score-cell" id="motus-score-d2">0</span>
+        </div>
+      </div>`;
+    return;
+  }
+  motusScoresEl.innerHTML = '';
+  motusScoresEl.classList.add('motus-scores--team');
+  for (let t = 0; t < teamCount; t++) {
+    const group = document.createElement('div');
+    group.id = `motus-score-group-${t}`;
+    group.className = 'motus-score motus-score--team';
+    group.setAttribute('role', 'group');
+    group.innerHTML = `
+      <span class="motus-score-team-name">Éq. ${t + 1}</span>
+      <div class="motus-score-cells">
+        <span class="motus-score-cell" id="motus-score-t${t}-d0">0</span>
+        <span class="motus-score-cell" id="motus-score-t${t}-d1">0</span>
+        <span class="motus-score-cell" id="motus-score-t${t}-d2">0</span>
+      </div>`;
+    motusScoresEl.appendChild(group);
+  }
 }
 
 function updateMotusScoreDom() {
-  const display = Math.min(sessionMotusScore, 999);
-  const str = String(display).padStart(3, '0');
-  for (let i = 0; i < 3; i++) {
-    const el = document.getElementById(`motus-score-d${i}`);
-    if (el) el.textContent = str[i] ?? '0';
+  const isTeam = motus?.teamMode && motus.teamSize > 1;
+  const count = isTeam ? motus.teamSize : 1;
+  if (isTeam && motusScoresEl && !document.getElementById('motus-score-group-0')) {
+    ensureTeamScoreDom(count);
   }
-  const group = document.getElementById('motus-score-group');
-  if (group) group.setAttribute('aria-label', `Score plateau : ${sessionMotusScore} points`);
+  const highlightTeam =
+    openingPlateauTeamIndex >= 0
+      ? openingPlateauTeamIndex
+      : motus?.currentTeamIndex ?? 0;
+  for (let t = 0; t < count; t++) {
+    const score = teamScores[t] ?? 0;
+    const display = Math.min(score, 999);
+    const str = String(display).padStart(3, '0');
+    for (let i = 0; i < 3; i++) {
+      const el = document.getElementById(
+        isTeam ? `motus-score-t${t}-d${i}` : `motus-score-d${i}`
+      );
+      if (el) el.textContent = str[i] ?? '0';
+    }
+    const group = document.getElementById(isTeam ? `motus-score-group-${t}` : 'motus-score-group');
+    if (group) {
+      const active = isTeam && t === highlightTeam;
+      group.classList.toggle('motus-score--active', active);
+      const name = `Équipe ${t + 1}`;
+      group.setAttribute(
+        'aria-label',
+        active ? `${name} — à vous · ${score} points` : `${name} · ${score} points`
+      );
+    }
+  }
 }
 
 function closeAllOverlays() {
@@ -380,6 +495,15 @@ function setMenuLoading(loading) {
   picker?.querySelectorAll('.length-btn').forEach((b) => {
     b.disabled = !!loading;
   });
+  document.querySelectorAll('.mode-btn, .team-size-btn').forEach((b) => {
+    b.disabled = !!loading;
+  });
+  const teamErrorSelect = $('#team-error-behavior');
+  if (teamErrorSelect) teamErrorSelect.disabled = !!loading;
+  const turnTimerCheckbox = $('#turn-timer-enabled');
+  const turnTimerSelect = $('#turn-timer-seconds');
+  if (turnTimerCheckbox) turnTimerCheckbox.disabled = !!loading;
+  if (turnTimerSelect) turnTimerSelect.disabled = !!loading || !turnTimerEnabled;
   if (status) {
     if (loading) {
       status.textContent = 'Chargement du dictionnaire…';
@@ -398,6 +522,10 @@ function goToPlayMenu() {
   const loadOnMenu = !!(motus && gamePanel.classList.contains('hidden') && motus.loading);
   if (wasInGame || loadOnMenu) gameSessionEpoch++;
   winBallDrawInFlight = false;
+  openingPlateauTeamIndex = -1;
+  stopTurnTimer();
+  turnTimerCastBlockToken++;
+  turnTimerCastBlocked = false;
   lastCastAnnouncedTarget = '';
   setMenuLoading(false);
   motus = null;
@@ -413,9 +541,304 @@ function goToPlayMenu() {
   resetBallPlateauSession();
   resetWinBallDrawSlots();
   resetSessionMotusScore();
+  resetSessionWordStats();
+  resetModalCloseButtonLabel();
+  modal.classList.add('hidden');
+  updateMotusScoreDom();
   updateNavHighlight();
   if (wasInGame) restartMenuGenerique();
   else syncMenuGenerique();
+}
+
+function getTeamPlayOptions() {
+  return {
+    teamMode: playMode === 'team',
+    teamSize: teamPlayerCount,
+    teamOnErrorBehavior: teamErrorBehavior,
+  };
+}
+
+function getPlayOptions() {
+  return {
+    ...getTeamPlayOptions(),
+    turnTimerEnabled,
+    turnTimerSeconds,
+  };
+}
+
+function syncWordsPerSessionMenuField() {
+  const sel = $('#words-per-session');
+  if (sel) wordsPerSession = Number(sel.value);
+  if (!Number.isFinite(wordsPerSession) || wordsPerSession < 0) wordsPerSession = 0;
+}
+
+function resetSessionWordStats() {
+  sessionWordsCompleted = 0;
+  sessionWordsWon = 0;
+  sessionWordsLost = 0;
+}
+
+function hasMoreWordsInSession() {
+  if (wordsPerSession <= 0) return true;
+  return sessionWordsCompleted < wordsPerSession;
+}
+
+/** Dernier mot du quota (avant {@link recordSessionWordEnded}). */
+function isLastWordOfSession() {
+  if (wordsPerSession <= 0) return false;
+  return sessionWordsCompleted >= wordsPerSession - 1;
+}
+
+function getSessionTeamCount() {
+  return motus?.teamMode && motus.teamSize > 1 ? motus.teamSize : 1;
+}
+
+function getMaxOpponentScore(excludeTeamIndex) {
+  let max = 0;
+  const n = getSessionTeamCount();
+  for (let t = 0; t < n; t++) {
+    if (t === excludeTeamIndex) continue;
+    max = Math.max(max, teamScores[t] ?? 0);
+  }
+  return max;
+}
+
+function getWordFoundScoreForSession() {
+  return isLastWordOfSession() ? SCORE_WORD_FOUND_LAST : SCORE_WORD_FOUND;
+}
+
+function getMotusLineScoreForSession() {
+  return SCORE_MOTUS_LINE;
+}
+
+/** Encore en course pour la victoire uniquement grâce à une ligne Motus au tirage. */
+function needsMotusDrawToWin(teamIndex) {
+  if (!motus?.teamMode || motus.teamSize < 2) return false;
+  const score = teamScores[teamIndex] ?? 0;
+  const maxOther = getMaxOpponentScore(teamIndex);
+  if (score > maxOther) return false;
+  return score + getMotusLineScoreForSession() > maxOther;
+}
+
+/** Une ligne Motus peut encore se compléter avec les boules restantes dans l’urne. */
+function couldMotusLineCompleteWithDraws(teamIndex, maxNewHits = 2) {
+  const session = plateauSession(teamIndex);
+  const hidden = session.hiddenCellIndices;
+  const hitSet = session.hitNumbers;
+  if (!(hidden instanceof Set) || hidden.size !== 8) return false;
+  initUrnRemainingIfNeeded(teamIndex);
+  const urn = session.urnRemaining;
+  if (!Array.isArray(urn) || urn.length === 0) return false;
+
+  const flat = WIN_MOTUS_GRID.flat();
+  const drawableNums = new Set(urn.filter((v) => v !== BALL_BLACK));
+
+  for (const line of allGridLinesAsIndexArrays()) {
+    const missing = [];
+    for (const cellIdx of line) {
+      if (hidden.has(cellIdx)) continue;
+      const num = flat[cellIdx];
+      if (!hitSetContains(hitSet, num)) missing.push(num);
+    }
+    if (missing.length === 0 || missing.length > maxNewHits) continue;
+    if (missing.every((n) => drawableNums.has(n))) return true;
+  }
+  return false;
+}
+
+/** Dernier mot : tirage plateau seulement si un Motus peut faire gagner la partie. */
+function shouldAllowLastWordWinDraw(teamIndex) {
+  if (!isLastWordOfSession()) return true;
+  if (!motus?.teamMode || motus.teamSize < 2) return true;
+  if (!needsMotusDrawToWin(teamIndex)) return false;
+  const session = plateauSession(teamIndex);
+  if (hasMotusLineFromSet(session.hitNumbers, teamIndex)) return true;
+  return couldMotusLineCompleteWithDraws(teamIndex);
+}
+
+function computeSessionWinnerResult() {
+  const n = getSessionTeamCount();
+  const scores = [];
+  for (let t = 0; t < n; t++) scores.push(teamScores[t] ?? 0);
+  const max = scores.length ? Math.max(...scores) : 0;
+  const winners = [];
+  for (let t = 0; t < n; t++) {
+    if (scores[t] === max) winners.push(t);
+  }
+  return { scores, max, winners };
+}
+
+function formatSessionPointsAndWinner() {
+  const { scores, max, winners } = computeSessionWinnerResult();
+  if (scores.length <= 1) {
+    return `Score final : ${scores[0] ?? 0} points.`;
+  }
+  const recap = scores
+    .map((s, i) => `Éq. ${i + 1} : ${s} pt${s !== 1 ? 's' : ''}`)
+    .join(' · ');
+  if (winners.length === 1) {
+    return `${recap} — Victoire de l’équipe ${winners[0] + 1} (${max} points) !`;
+  }
+  return `${recap} — Égalité entre les équipes ${winners.map((i) => i + 1).join(' et ')} (${max} points).`;
+}
+
+function finishSessionAfterLastWordWithoutDraw() {
+  if (motus) {
+    motus.winBallPhase = false;
+    motus.emit();
+  }
+  winBallDrawInFlight = false;
+  gamePanel?.classList.remove('game--win-ball');
+  showSessionCompleteModal();
+}
+
+function recordSessionWordEnded(won) {
+  sessionWordsCompleted++;
+  if (won) sessionWordsWon++;
+  else sessionWordsLost++;
+}
+
+function resetModalCloseButtonLabel() {
+  const btn = $('#btn-modal-close');
+  if (btn) btn.textContent = 'Continuer';
+}
+
+function showSessionCompleteModal(lastWord = '') {
+  modal.dataset.action = 'session-end';
+  modal.classList.remove('hidden');
+  const total = wordsPerSession > 0 ? wordsPerSession : sessionWordsCompleted;
+  modalTitle.textContent = 'Partie terminée';
+  const w = sessionWordsWon;
+  const l = sessionWordsLost;
+  let text = `${w} mot${w !== 1 ? 's' : ''} trouvé${w !== 1 ? 's' : ''}, ${l} non trouvé${l !== 1 ? 's' : ''} — ${total} joué${total !== 1 ? 's' : ''}.`;
+  if (lastWord) text = `Le mot était : ${lastWord}. ${text}`;
+  text = `${text} ${formatSessionPointsAndWinner()}`;
+  modalWord.textContent = text;
+  const btn = $('#btn-modal-close');
+  if (btn) btn.textContent = 'Retour au menu';
+}
+
+function updateWordProgressDom() {
+  if (!wordProgressEl) return;
+  if (wordsPerSession <= 0) {
+    wordProgressEl.classList.add('hidden');
+    wordProgressEl.textContent = '';
+    return;
+  }
+  const current = Math.min(sessionWordsCompleted + 1, wordsPerSession);
+  wordProgressEl.textContent = `Mot ${current} / ${wordsPerSession}`;
+  wordProgressEl.classList.remove('hidden');
+}
+
+async function continueSessionNextWord() {
+  if (!motus) return;
+  stopTurnTimer();
+  unlockAudioSync();
+  motus.winBallPhase = false;
+  gridEl?.classList.remove('grid--ball-pending');
+  gamePanel.classList.remove('game--win-ball');
+  resetWinBallDrawSlots();
+  motus.startNextWordAfterWin();
+  lastCastAnnouncedTarget = '';
+  if (motus.target) {
+    primeCastLetterAudio(motus.target);
+    void announceCastLetterForTarget(motus.target);
+  } else {
+    scheduleCastLetterOnGesture();
+  }
+  updateWordProgressDom();
+  motus.emit();
+  gridEl?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+}
+
+function syncTurnTimerMenuFields() {
+  const enabledInput = $('#turn-timer-enabled');
+  const secSelect = $('#turn-timer-seconds');
+  if (enabledInput) turnTimerEnabled = enabledInput.checked;
+  if (secSelect) {
+    secSelect.disabled = !turnTimerEnabled;
+    turnTimerSeconds = Number(secSelect.value) || 8;
+  }
+}
+
+function shouldRunTurnTimer(game) {
+  if (!game?.turnTimerEnabled) return false;
+  if (turnTimerCastBlocked) return false;
+  if (game.bonusRevealCol >= 0 || game.bonusRevealBlinking) return false;
+  if (!isLetterGridActive(game) || game.inputLocked || game.verifyAnimating) return false;
+  if (openingPlateauTeamIndex >= 0) return false;
+  return true;
+}
+
+function turnTimerKey(game) {
+  return `${gameSessionEpoch}:${game.currentTeamIndex}:${game.currentRow}`;
+}
+
+function updateTurnTimerDom(secondsLeft) {
+  if (!turnTimerEl) return;
+  if (secondsLeft == null || secondsLeft <= 0) {
+    turnTimerEl.classList.add('hidden');
+    turnTimerEl.textContent = '';
+    turnTimerEl.classList.remove('turn-timer--urgent');
+    return;
+  }
+  turnTimerEl.classList.remove('hidden');
+  turnTimerEl.textContent = `${secondsLeft}s`;
+  turnTimerEl.classList.toggle('turn-timer--urgent', secondsLeft <= 3);
+}
+
+function stopTurnTimer() {
+  turnTimerToken++;
+  turnTimerLastKey = '';
+  if (turnTimerIntervalId != null) {
+    clearInterval(turnTimerIntervalId);
+    turnTimerIntervalId = null;
+  }
+  turnTimerDeadline = 0;
+  updateTurnTimerDom(null);
+}
+
+function syncTurnTimer(game) {
+  if (!shouldRunTurnTimer(game)) {
+    stopTurnTimer();
+    return;
+  }
+  const key = turnTimerKey(game);
+  if (key === turnTimerLastKey && turnTimerIntervalId != null) {
+    const left = Math.ceil((turnTimerDeadline - Date.now()) / 1000);
+    updateTurnTimerDom(Math.max(0, left));
+    return;
+  }
+  turnTimerLastKey = key;
+  turnTimerToken++;
+  const token = turnTimerToken;
+  const sec = Math.max(8, Math.min(30, game.turnTimerSeconds || 8));
+  turnTimerDeadline = Date.now() + sec * 1000;
+  updateTurnTimerDom(sec);
+  if (turnTimerIntervalId != null) clearInterval(turnTimerIntervalId);
+  turnTimerIntervalId = setInterval(() => {
+    if (token !== turnTimerToken || motus !== game) return;
+    const left = Math.ceil((turnTimerDeadline - Date.now()) / 1000);
+    if (left <= 0) {
+      stopTurnTimer();
+      if (motus === game && shouldRunTurnTimer(game) && !turnTimerHandling) {
+        turnTimerHandling = true;
+        void Promise.resolve(game.handleTurnTimeout()).finally(() => {
+          turnTimerHandling = false;
+          if (motus === game) syncTurnTimer(game);
+        });
+      }
+      return;
+    }
+    updateTurnTimerDom(left);
+  }, 250);
+}
+
+function syncTeamOptionsVisibility() {
+  const wrap = $('#team-options');
+  const isTeam = playMode === 'team';
+  wrap?.classList.toggle('hidden', !isTeam);
+  if (wrap) wrap.setAttribute('aria-hidden', isTeam ? 'false' : 'true');
 }
 
 function refreshDebugPanel() {
@@ -438,7 +861,11 @@ function refreshDebugPanel() {
     return;
   }
   const vSize = motus.verifySet instanceof Set ? motus.verifySet.size : '?';
-  stateEl.textContent = `Longueur ${motus.length} · Essai ${motus.currentRow + 1} / ${motus.maxAttempts} · Terminé : ${motus.finished ? 'oui' : 'non'} · Score : ${sessionMotusScore} · Mots vérif. (Set) : ${vSize}`;
+  const teamInfo = motus.teamMode ? ` · ${motus.getCurrentTeamName()} / ${motus.teamSize} équipes` : '';
+  const scoreTxt = motus.teamMode
+    ? teamScores.map((s, i) => `Éq.${i + 1}:${s ?? 0}`).join(' ')
+    : String(teamScores[0] ?? 0);
+  stateEl.textContent = `Longueur ${motus.length} · Essai ${motus.currentRow + 1} / ${motus.maxAttempts}${teamInfo} · Terminé : ${motus.finished ? 'oui' : 'non'} · Score : ${scoreTxt} · Mots vérif. (Set) : ${vSize}`;
   wordEl.textContent = motus.target || '—';
 }
 
@@ -450,6 +877,72 @@ function initMenu() {
     hideSfxBtn.disabled = false;
     hideSfxBtn.textContent = `Masquer 8 — ${GAME_SFX.plateauHideEight}`;
   }
+
+  const modePicker = $('#mode-picker');
+  modePicker?.querySelectorAll('.mode-btn').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      playMode = btn.dataset.mode === 'team' ? 'team' : 'solo';
+      modePicker.querySelectorAll('.mode-btn').forEach((b) => {
+        const active = b.dataset.mode === playMode;
+        b.classList.toggle('active', active);
+        b.setAttribute('aria-pressed', active ? 'true' : 'false');
+      });
+      syncTeamOptionsVisibility();
+    });
+  });
+  syncTeamOptionsVisibility();
+
+  const teamPicker = $('#team-size-picker');
+  for (let n = 2; n <= 4; n++) {
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'team-size-btn length-btn' + (n === teamPlayerCount ? ' active' : '');
+    btn.textContent = String(n);
+    btn.dataset.teamSize = String(n);
+    btn.setAttribute('aria-pressed', n === teamPlayerCount ? 'true' : 'false');
+    btn.addEventListener('click', () => {
+      teamPlayerCount = n;
+      teamPicker.querySelectorAll('.team-size-btn').forEach((b) => {
+        const active = Number(b.dataset.teamSize) === n;
+        b.classList.toggle('active', active);
+        b.setAttribute('aria-pressed', active ? 'true' : 'false');
+      });
+    });
+    teamPicker.appendChild(btn);
+  }
+
+  const teamErrorSelect = $('#team-error-behavior');
+  if (teamErrorSelect) {
+    teamErrorSelect.value = teamErrorBehavior;
+    teamErrorSelect.addEventListener('change', () => {
+      const v = teamErrorSelect.value;
+      const legacy = { 'relay-bonus': 'add-bonus', relay: 'add', stay: 'replace' };
+      const normalized = legacy[v] ?? v;
+      if (
+        normalized === 'replace-bonus' ||
+        normalized === 'replace' ||
+        normalized === 'add-bonus' ||
+        normalized === 'add'
+      ) {
+        teamErrorBehavior = normalized;
+        if (normalized !== v) teamErrorSelect.value = normalized;
+      }
+    });
+  }
+
+  const turnTimerCheckbox = $('#turn-timer-enabled');
+  const turnTimerSelect = $('#turn-timer-seconds');
+  if (turnTimerCheckbox) {
+    turnTimerCheckbox.checked = turnTimerEnabled;
+    turnTimerCheckbox.addEventListener('change', syncTurnTimerMenuFields);
+  }
+  if (turnTimerSelect) {
+    turnTimerSelect.value = String(turnTimerSeconds);
+    turnTimerSelect.addEventListener('change', () => {
+      syncTurnTimerMenuFields();
+    });
+  }
+  syncTurnTimerMenuFields();
 
   const picker = $('#length-picker');
   for (let n = 5; n <= 10; n++) {
@@ -505,7 +998,7 @@ function initMenu() {
 
   $('#debug-refresh-state').addEventListener('click', () => refreshDebugPanel());
   $('#debug-new-word').addEventListener('click', () => {
-    void motus?.start(selectedLength).then(() => refreshDebugPanel());
+    void motus?.start(selectedLength, getPlayOptions()).then(() => refreshDebugPanel());
   });
   $('#debug-copy-target').addEventListener('click', async () => {
     const w = $('#debug-target-word').textContent?.trim();
@@ -601,24 +1094,18 @@ function initMenu() {
 
   $('#btn-win-continue').addEventListener('click', () => {
     if (!motus || winBallDrawInFlight) return;
-    unlockAudioSync();
-    motus.winBallPhase = false;
-    gridEl.classList.remove('grid--ball-pending');
-    gamePanel.classList.remove('game--win-ball');
-    resetWinBallDrawSlots();
-    motus.startNextWordAfterWin();
-    if (motus.target) {
-      primeCastLetterAudio(motus.target);
-      const target = motus.target;
-      void announceWordGridFromTarget(target).then((ok) => {
-        if (ok && motus?.target === target) lastCastAnnouncedTarget = target;
-      });
-    } else {
-      lastCastAnnouncedTarget = '';
-      scheduleCastLetterOnGesture();
+    if (!hasMoreWordsInSession()) {
+      showSessionCompleteModal();
+      return;
     }
-    gridEl?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+    void continueSessionNextWord();
   });
+
+  const wordsPerSessionSelect = $('#words-per-session');
+  if (wordsPerSessionSelect) {
+    wordsPerSessionSelect.addEventListener('change', syncWordsPerSessionMenuField);
+    syncWordsPerSessionMenuField();
+  }
 
   updateNavHighlight();
 }
@@ -754,9 +1241,9 @@ async function revealMotusGridCellsStaggered(epochSnap = null) {
 }
 
 /** Les 8 cases « d’office » repassent face cachée (aide candidats + contrainte type plateau TV). */
-async function flipEightDesignatedCellsToHidden(epochSnap = null) {
-  ensureHidden8AndUrnNumbers();
-  const hidden = ballPlateauSession.hiddenCellIndices;
+async function flipEightDesignatedCellsToHidden(epochSnap = null, teamIndex = activeTeamIndex()) {
+  ensureHidden8AndUrnNumbers(teamIndex);
+  const hidden = plateauSession(teamIndex).hiddenCellIndices;
   if (!hidden || hidden.size !== 8) return;
   const order = [...hidden].sort((a, b) => a - b);
   const reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
@@ -791,30 +1278,80 @@ function shuffleInPlace(arr) {
   return arr;
 }
 
-/** Plateau tirage Motus : inchangé entre deux mots trouvés jusqu’à un Motus (ligne / colonne / diagonale). */
-const ballPlateauSession = {
-  hitNumbers: new Set(),
-  urnNumbers: null,
-  /** Indices 0–24 des 8 cases repassées face boule après la présentation des 25 numéros. */
-  hiddenCellIndices: null,
-  /** Après intro : 25 numéros montrés puis 8 repassés face cachée ; tirages sur l’urne (17 + 3 noires). */
-  introSequenceComplete: false,
-  urnRemaining: null,
-};
+function createPlateauSession() {
+  return {
+    hitNumbers: new Set(),
+    urnNumbers: null,
+    hiddenCellIndices: null,
+    introSequenceComplete: false,
+    urnRemaining: null,
+  };
+}
+
+/** Un plateau de chiffres par équipe (solo = une seule entrée). */
+let plateauSessions = [createPlateauSession()];
+
+function activeTeamIndex() {
+  return motus?.teamMode ? motus.currentTeamIndex : 0;
+}
+
+function plateauSession(teamIndex = activeTeamIndex()) {
+  if (!plateauSessions[teamIndex]) {
+    plateauSessions[teamIndex] = createPlateauSession();
+  }
+  return plateauSessions[teamIndex];
+}
+
+function initPlateauSessionsForGame(teamCount) {
+  plateauSessions = Array.from({ length: teamCount }, () => createPlateauSession());
+}
 
 /**
- * @param {{ full?: boolean }} [opts] — `full: false` garde la grille déjà présentée (nouveau mot).
+ * @param {{ full?: boolean, teamIndex?: number }} [opts]
+ * — `full: false` garde la grille déjà présentée (nouveau mot).
  */
 function resetBallPlateauSession(opts = {}) {
   const full = opts.full !== false;
-  ballPlateauSession.hitNumbers.clear();
-  ballPlateauSession.urnRemaining = null;
-  if (!full) return;
-  ballPlateauSession.urnNumbers = null;
-  ballPlateauSession.hiddenCellIndices = null;
-  ballPlateauSession.introSequenceComplete = false;
+  const indices =
+    opts.teamIndex != null
+      ? [opts.teamIndex]
+      : plateauSessions.map((_, i) => i);
+  for (const ti of indices) {
+    const session = plateauSession(ti);
+    session.hitNumbers.clear();
+    session.urnRemaining = null;
+    if (!full) continue;
+    session.urnNumbers = null;
+    session.hiddenCellIndices = null;
+    session.introSequenceComplete = false;
+  }
+  if (full && opts.teamIndex == null) {
+    const host = $('#ball-motus-grid');
+    if (host) host.innerHTML = '';
+  }
+}
+
+function mountPlateauGridForTeam(teamIndex) {
+  const session = plateauSession(teamIndex);
+  ensureHidden8AndUrnNumbers(teamIndex);
   const host = $('#ball-motus-grid');
-  if (host) host.innerHTML = '';
+  if (!host) return;
+  host.innerHTML = '';
+  buildWinBallGridDom(host);
+  if (!session.introSequenceComplete) return;
+  host.querySelectorAll('.ball-flip-inner').forEach((el) => {
+    el.classList.add('ball-flip-inner--revealed');
+  });
+  const hidden = session.hiddenCellIndices;
+  if (hidden) {
+    for (const ci of hidden) {
+      host
+        .querySelector(`[data-cell-idx="${ci}"]`)
+        ?.querySelector('.ball-flip-inner')
+        ?.classList.remove('ball-flip-inner--revealed');
+    }
+  }
+  syncBallGridHitsToDom(teamIndex);
 }
 
 /** Remet les deux emplacements de boules tirées à l’état initial (?). */
@@ -835,69 +1372,84 @@ function resetWinBallDrawSlots() {
  * Après un Motus : nouvelle grille comme au début (nouveau masque de 8 cases, intro 25+8, urne pleine, aucun tir).
  * Le score plateau (`sessionMotusScore`) n’est pas modifié.
  */
-async function reinitializePlateauAfterMotus(epochSnap = null) {
-  resetBallPlateauSession({ full: true });
+async function reinitializePlateauAfterMotus(epochSnap = null, teamIndex = activeTeamIndex()) {
+  resetBallPlateauSession({ full: true, teamIndex });
   resetWinBallDrawSlots();
-  ensureHidden8AndUrnNumbers();
+  ensureHidden8AndUrnNumbers(teamIndex);
   const gridHost = $('#ball-motus-grid');
   if (!gridHost) {
-    ballPlateauSession.introSequenceComplete = false;
+    plateauSession(teamIndex).introSequenceComplete = false;
     return;
   }
-  buildWinBallGridDom(gridHost);
-  ballPlateauSession.introSequenceComplete = false;
+  mountPlateauGridForTeam(teamIndex);
+  plateauSession(teamIndex).introSequenceComplete = false;
   motus?.emit();
-  await runPlateauIntroSequence(epochSnap);
+  await runPlateauIntroSequence(epochSnap, teamIndex);
   if (shouldAbortPlateauSession(epochSnap)) return;
-  initUrnRemainingIfNeeded();
+  initUrnRemainingIfNeeded(teamIndex);
   motus?.emit();
 }
 
 /** Verrou partagé : intro grille (6/7) une seule fois, y compris si victoire arrive pendant l’anim. */
 let plateauIntroLock = false;
-async function runPlateauIntroSequence(epochSnap = null) {
+async function runPlateauIntroSequence(epochSnap = null, teamIndex = activeTeamIndex()) {
+  mountPlateauGridForTeam(teamIndex);
   await primeGridBallSounds();
   if (shouldAbortPlateauSession(epochSnap)) return;
   await revealMotusGridCellsStaggered(epochSnap);
   if (shouldAbortPlateauSession(epochSnap)) return;
-  await flipEightDesignatedCellsToHidden(epochSnap);
+  await flipEightDesignatedCellsToHidden(epochSnap, teamIndex);
   if (shouldAbortPlateauSession(epochSnap)) return;
-  ballPlateauSession.introSequenceComplete = true;
-  syncBallGridHitsToDom();
+  plateauSession(teamIndex).introSequenceComplete = true;
+  syncBallGridHitsToDom(teamIndex);
 }
 
 /** Attend ou lance la présentation 25 numéros + 8 faces cachées (sans tirage urne). */
-async function ensurePlateauIntroDone(epochSnap = null) {
+/** Présente le plateau 25+8 de chaque équipe à la suite avant la 1ʳᵉ saisie. */
+async function ensureOpeningPlateausPresented(epochSnap, teamCount, game) {
+  const count = Math.max(1, teamCount);
+  for (let t = 0; t < count; t++) {
+    if (shouldAbortPlateauSession(epochSnap)) return;
+    openingPlateauTeamIndex = t;
+    game.emit();
+    await ensurePlateauIntroDone(epochSnap, t);
+    if (shouldAbortPlateauSession(epochSnap)) return;
+    if (t < count - 1) await sleep(400);
+  }
+}
+
+async function ensurePlateauIntroDone(epochSnap = null, teamIndex = activeTeamIndex()) {
   if (shouldAbortPlateauSession(epochSnap)) return;
-  if (ballPlateauSession.introSequenceComplete) return;
+  if (plateauSession(teamIndex).introSequenceComplete) return;
   while (plateauIntroLock) {
     if (shouldAbortPlateauSession(epochSnap)) return;
     await sleep(40);
   }
   if (shouldAbortPlateauSession(epochSnap)) return;
-  if (ballPlateauSession.introSequenceComplete) return;
+  if (plateauSession(teamIndex).introSequenceComplete) return;
   plateauIntroLock = true;
   try {
-    await runPlateauIntroSequence(epochSnap);
+    await runPlateauIntroSequence(epochSnap, teamIndex);
   } finally {
     plateauIntroLock = false;
     if (!shouldAbortPlateauSession(epochSnap)) {
-      ballPlateauSession.introSequenceComplete = true;
+      plateauSession(teamIndex).introSequenceComplete = true;
     }
   }
 }
 
 /** Calcule les 8 cases masquées et les 17 numéros de l’urne (complémentaire). */
-function ensureHidden8AndUrnNumbers() {
-  if (ballPlateauSession.urnNumbers) return;
+function ensureHidden8AndUrnNumbers(teamIndex = activeTeamIndex()) {
+  const session = plateauSession(teamIndex);
+  if (session.urnNumbers) return;
   const flat = WIN_MOTUS_GRID.flat();
   const hidden = pickHiddenCellIndices8Set();
-  ballPlateauSession.hiddenCellIndices = hidden;
-  ballPlateauSession.urnNumbers = flat.filter((_, i) => !hidden.has(i));
+  session.hiddenCellIndices = hidden;
+  session.urnNumbers = flat.filter((_, i) => !hidden.has(i));
 }
 
-function syncBallGridHitsToDom() {
-  ballPlateauSession.hitNumbers.forEach((n) => {
+function syncBallGridHitsToDom(teamIndex = activeTeamIndex()) {
+  plateauSession(teamIndex).hitNumbers.forEach((n) => {
     const wrap = document.querySelector(`#ball-motus-grid .ball-flip-wrap[data-num="${n}"]`);
     if (!wrap) return;
     wrap.classList.add('ball-flip-wrap--hit');
@@ -905,18 +1457,16 @@ function syncBallGridHitsToDom() {
 }
 
 /** Remplit l’urne (17 + 3) une fois par cycle Motus ; les tirages enlèvent des boules sans remise jusqu’au Motus ou le menu. */
-function initUrnRemainingIfNeeded() {
-  ensureHidden8AndUrnNumbers();
-  if (ballPlateauSession.urnRemaining !== null) return;
-  ballPlateauSession.urnRemaining = [
-    ...ballPlateauSession.urnNumbers,
-    ...Array(URN_BLACK_COUNT).fill(BALL_BLACK),
-  ];
+function initUrnRemainingIfNeeded(teamIndex = activeTeamIndex()) {
+  ensureHidden8AndUrnNumbers(teamIndex);
+  const session = plateauSession(teamIndex);
+  if (session.urnRemaining !== null) return;
+  session.urnRemaining = [...session.urnNumbers, ...Array(URN_BLACK_COUNT).fill(BALL_BLACK)];
 }
 
 /** Brassage obligatoire puis une boule (sans remise dans l’urne du plateau). */
-function drawOneFromPlateauUrn() {
-  const urn = ballPlateauSession.urnRemaining;
+function drawOneFromPlateauUrn(teamIndex = activeTeamIndex()) {
+  const urn = plateauSession(teamIndex).urnRemaining;
   if (!urn || urn.length === 0) return BALL_BLACK;
   shuffleInPlace(urn);
   return urn.pop();
@@ -931,8 +1481,8 @@ function hitSetContains(hitSet, num) {
  * (hors les 8 masquées) a déjà été tirée ; les cases face cachée comptent comme « remplies »
  * pour l’alignement (sinon 5 tirages sur une même ligne sont impossibles).
  */
-function hasMotusLineFromSet(hitNumSet) {
-  const hidden = ballPlateauSession.hiddenCellIndices;
+function hasMotusLineFromSet(hitNumSet, teamIndex = activeTeamIndex()) {
+  const hidden = plateauSession(teamIndex).hiddenCellIndices;
   if (!(hidden instanceof Set) || hidden.size !== 8) return false;
   const flat = WIN_MOTUS_GRID.flat();
 
@@ -952,8 +1502,8 @@ function hasMotusLineFromSet(hitNumSet) {
 }
 
 /** Indices 0–24 de la première ligne / colonne / diagonale complète. */
-function findCompletedMotusLineCellIndices(hitNumSet) {
-  const hidden = ballPlateauSession.hiddenCellIndices;
+function findCompletedMotusLineCellIndices(hitNumSet, teamIndex = activeTeamIndex()) {
+  const hidden = plateauSession(teamIndex).hiddenCellIndices;
   if (!(hidden instanceof Set) || hidden.size !== 8) return null;
   const flat = WIN_MOTUS_GRID.flat();
   for (const line of allGridLinesAsIndexArrays()) {
@@ -997,8 +1547,9 @@ function waitFlipInnerTransition(inner) {
 const MOTUS_LINE_LETTERS = ['M', 'O', 'T', 'U', 'S'];
 
 /** Retourne la ligne Motus case par case en affichant M O T U S (en parallèle du son 51). */
-async function playMotusLineLettersFlipSequence(epochSnap) {
-  const line = findCompletedMotusLineCellIndices(ballPlateauSession.hitNumbers);
+async function playMotusLineLettersFlipSequence(epochSnap, teamIndex = activeTeamIndex()) {
+  const session = plateauSession(teamIndex);
+  const line = findCompletedMotusLineCellIndices(session.hitNumbers, teamIndex);
   if (!line?.length) {
     await sleep(200);
     return;
@@ -1034,7 +1585,7 @@ async function playMotusLineLettersFlipSequence(epochSnap) {
   await sleep(reduced ? 100 : 280);
 }
 
-async function animateWinBall(slotIndex, value, epochSnap = null) {
+async function animateWinBall(slotIndex, value, epochSnap = null, teamIndex = activeTeamIndex()) {
   const mini = document.getElementById(`win-ball-mini-${slotIndex}`);
   const char = document.getElementById(`win-ball-char-${slotIndex}`);
   if (!mini || !char) return;
@@ -1078,60 +1629,66 @@ async function animateWinBall(slotIndex, value, epochSnap = null) {
       wrap.classList.add('ball-flip-wrap--hit');
     }
     const n = typeof value === 'number' ? value : Number(value);
-    if (Number.isFinite(n)) ballPlateauSession.hitNumbers.add(n);
+    if (Number.isFinite(n)) plateauSession(teamIndex).hitNumbers.add(n);
   }
   await sleep(180);
 }
 
-async function runWinBallMotus(epochSnap) {
+/** Boule noire au tirage : l’équipe suivante prend la main (mode équipe). */
+function passHandToNextTeamAfterBlackBall() {
+  if (!motus?.teamMode || motus.teamSize < 2) return;
+  motus.advanceTeam();
+  motus.emit();
+}
+
+async function runWinBallMotus(epochSnap, teamIndex = activeTeamIndex()) {
   await sleep(200);
   if (shouldAbortPlateauSession(epochSnap)) return;
 
-  const gridHost = $('#ball-motus-grid');
-  if (gridHost && !gridHost.querySelector('.ball-flip-wrap')) {
-    buildWinBallGridDom(gridHost);
-    syncBallGridHitsToDom();
-  }
+  mountPlateauGridForTeam(teamIndex);
 
-  if (!ballPlateauSession.introSequenceComplete) {
-    await ensurePlateauIntroDone(epochSnap);
+  if (!plateauSession(teamIndex).introSequenceComplete) {
+    await ensurePlateauIntroDone(epochSnap, teamIndex);
     if (shouldAbortPlateauSession(epochSnap)) return;
     await sleep(280);
     if (shouldAbortPlateauSession(epochSnap)) return;
   }
 
-  initUrnRemainingIfNeeded();
+  initUrnRemainingIfNeeded(teamIndex);
   motus?.emit();
 
-  const draw0 = drawOneFromPlateauUrn();
-  await animateWinBall(0, draw0, epochSnap);
+  const session = plateauSession(teamIndex);
+  const draw0 = drawOneFromPlateauUrn(teamIndex);
+  await animateWinBall(0, draw0, epochSnap, teamIndex);
   if (shouldAbortPlateauSession(epochSnap)) return;
-  motus?.emit();
+  if (draw0 === BALL_BLACK) passHandToNextTeamAfterBlackBall();
+  else motus?.emit();
 
   let draw1 = null;
-  const motusAfterFirst = hasMotusLineFromSet(ballPlateauSession.hitNumbers);
+  const motusAfterFirst = hasMotusLineFromSet(session.hitNumbers, teamIndex);
   /** Après une boule noire ou un Motus : pas de second tirage. */
   if (!motusAfterFirst && draw0 !== BALL_BLACK) {
     await sleep(320);
     if (shouldAbortPlateauSession(epochSnap)) return;
-    draw1 = drawOneFromPlateauUrn();
-    await animateWinBall(1, draw1, epochSnap);
+    draw1 = drawOneFromPlateauUrn(teamIndex);
+    await animateWinBall(1, draw1, epochSnap, teamIndex);
     if (shouldAbortPlateauSession(epochSnap)) return;
-    motus?.emit();
+    if (draw1 === BALL_BLACK) passHandToNextTeamAfterBlackBall();
+    else motus?.emit();
   }
 
-  const motusLine = hasMotusLineFromSet(ballPlateauSession.hitNumbers);
+  const motusLine = hasMotusLineFromSet(session.hitNumbers, teamIndex);
 
   if (motusLine) {
-    addSessionMotusScore(SCORE_MOTUS_LINE);
+    addSessionMotusScore(getMotusLineScoreForSession(), teamIndex);
     unlockAudioSync();
     const motusSoundPromise = playGridMotusLineSound().catch(() => {});
     await Promise.all([
-      playMotusLineLettersFlipSequence(epochSnap),
+      playMotusLineLettersFlipSequence(epochSnap, teamIndex),
       motusSoundPromise,
     ]);
     if (shouldAbortPlateauSession(epochSnap)) return;
-    await reinitializePlateauAfterMotus(epochSnap);
+    await reinitializePlateauAfterMotus(epochSnap, teamIndex);
     if (shouldAbortPlateauSession(epochSnap)) return;
     motus?.emit();
     return;
@@ -1140,10 +1697,18 @@ async function runWinBallMotus(epochSnap) {
 
 async function startGame() {
   closeAllOverlays();
+  stopTurnTimer();
+  syncTurnTimerMenuFields();
+  syncWordsPerSessionMenuField();
+  resetSessionWordStats();
+  resetModalCloseButtonLabel();
+  modal.classList.add('hidden');
   setMenuLoading(true);
   try {
-    resetSessionMotusScore();
-    resetBallPlateauSession();
+    const teamCount = playMode === 'team' ? teamPlayerCount : 1;
+    resetSessionMotusScore(teamCount);
+    initPlateauSessionsForGame(teamCount);
+    resetBallPlateauSession({ full: true });
     const game = new MotusGame({
       onUpdate: render,
       onEnd: showEndModal,
@@ -1151,12 +1716,13 @@ async function startGame() {
     motus = game;
     messageEl.textContent = 'Chargement du dictionnaire…';
     try {
-      await game.start(selectedLength);
+      await game.start(selectedLength, getPlayOptions());
     } catch {
       /* dictionnaire / réseau */
     }
     if (motus !== game) return;
     if (game.target) primeCastLetterAudio(game.target);
+    updateMotusScoreDom();
 
     menu.classList.add('hidden');
     gamePanel.classList.remove('hidden');
@@ -1168,21 +1734,15 @@ async function startGame() {
     lastCastAnnouncedTarget = '';
 
     const epochSnap = gameSessionEpoch;
-    game.message = 'Présentation du plateau Motus…';
-    game.emit();
-
-    const gridHost = $('#ball-motus-grid');
-    if (gridHost) {
-      buildWinBallGridDom(gridHost);
-      syncBallGridHitsToDom();
+    for (let t = 0; t < teamCount; t++) {
+      ensureHidden8AndUrnNumbers(t);
     }
+
     try {
-      await ensurePlateauIntroDone(epochSnap);
+      await ensureOpeningPlateausPresented(epochSnap, teamCount, game);
     } finally {
+      openingPlateauTeamIndex = -1;
       if (motus === game) {
-        if (!ballPlateauSession.introSequenceComplete) {
-          ballPlateauSession.introSequenceComplete = true;
-        }
         game.message = '';
         game.emit();
       }
@@ -1192,13 +1752,12 @@ async function startGame() {
 
     primeCastLetterAudio(game.target);
     lastCastAnnouncedTarget = '';
-    void announceWordGridFromTarget(game.target).then((ok) => {
-      if (ok && motus === game) lastCastAnnouncedTarget = game.target;
-    });
+    void announceCastLetterForTarget(game.target);
     scheduleCastLetterOnGesture();
     if (isSafariBrowser()) {
       void warmVerifyAudio();
     }
+    updateWordProgressDom();
   } finally {
     setMenuLoading(false);
   }
@@ -1206,13 +1765,22 @@ async function startGame() {
 
 function showEndModal(payload) {
   if (payload.won) {
-    addSessionMotusScore(SCORE_WORD_FOUND);
+    const isLast = isLastWordOfSession();
+    recordSessionWordEnded(true);
+    const teamIdx = motus?.currentTeamIndex ?? 0;
+    addSessionMotusScore(getWordFoundScoreForSession(), teamIdx);
+
+    if (isLast && !shouldAllowLastWordWinDraw(teamIdx)) {
+      finishSessionAfterLastWordWithoutDraw();
+      return;
+    }
+
     const epochSnap = gameSessionEpoch;
     const gameRef = motus;
     if (winBallDrawInFlight) return;
     winBallDrawInFlight = true;
     if (motus === gameRef) gameRef.emit();
-    void runWinBallMotus(epochSnap)
+    void runWinBallMotus(epochSnap, teamIdx)
       .catch(() => {})
       .finally(() => {
         winBallDrawInFlight = false;
@@ -1220,9 +1788,18 @@ function showEndModal(payload) {
       });
     return;
   }
+  recordSessionWordEnded(false);
+  if (!hasMoreWordsInSession()) {
+    showSessionCompleteModal(payload.word);
+    return;
+  }
+  modal.dataset.action = 'next-word';
+  resetModalCloseButtonLabel();
   modal.classList.remove('hidden');
   modalTitle.textContent = 'Motus !';
-  modalWord.textContent = `Le mot était : ${payload.word}`;
+  const progress =
+    wordsPerSession > 0 ? ` — mot ${sessionWordsCompleted} / ${wordsPerSession}` : '';
+  modalWord.textContent = `Le mot était : ${payload.word}${progress}`;
 }
 
 const mobileKeyboardMq = () =>
@@ -1268,6 +1845,31 @@ function syncGameLayoutVars(game) {
   gridEl?.style.setProperty('--rows', String(game.maxAttempts));
 }
 
+function isBonusRevealCell(game, ri, ci) {
+  return game.bonusRevealCol >= 0 && ri === game.currentRow && ci === game.bonusRevealCol;
+}
+
+function applyBonusBlinkClass(cell, game, ri, ci) {
+  if (!isBonusRevealCell(game, ri, ci)) return;
+  cell.classList.add('cell--bonus-blink');
+  if (game.bonusRevealBlinking && !game.bonusRevealVisible) {
+    cell.classList.add('cell--bonus-hidden');
+  }
+}
+
+/** Texte affiché dans une case (masque la lettre bonus pendant le clignotement). */
+function cellCharDisplay(game, ri, ci, letter, state) {
+  if (
+    isBonusRevealCell(game, ri, ci) &&
+    game.bonusRevealBlinking &&
+    !game.bonusRevealVisible
+  ) {
+    return '·';
+  }
+  const showDot = ri <= game.currentRow && !letter && state === 'empty';
+  return letter || (showDot ? '·' : '');
+}
+
 /** Pendant la validation Safari : ne reconstruit pas toute la grille (évite le son hachuré). */
 function patchVerifyRevealRow(game) {
   if (!gridEl || !game?.verifyAnimating) return false;
@@ -1300,8 +1902,8 @@ function patchVerifyRevealRow(game) {
       span.className = 'cell-char';
       cell.appendChild(span);
     }
-    const showDot = ri <= game.currentRow && !letter && state === 'empty';
-    span.textContent = letter || (showDot ? '·' : '');
+    span.textContent = cellCharDisplay(game, ri, ci, letter, state);
+    applyBonusBlinkClass(cell, game, ri, ci);
   }
   return true;
 }
@@ -1319,25 +1921,25 @@ function render(game) {
     document.querySelector('.game-actions')?.classList.add('hidden');
     gridEl.classList.remove('grid--ball-pending');
     gamePanel.classList.remove('game--win-ball');
+    stopTurnTimer();
     return;
   }
 
   const inDrawPhase = !!(game.winBallPhase && game.finished);
   const inWordPlay = !game.loading && !game.winBallPhase;
-  const plateauIntroPending =
-    !ballPlateauSession.introSequenceComplete && (inWordPlay || inDrawPhase);
-  /** Grille chiffres (intro plateau ou tirage après victoire). */
-  const showBallGrid = plateauIntroPending || inDrawPhase;
-  /** Grille lettres : uniquement pendant la saisie du mot, jamais en même temps que les chiffres. */
-  const showLetterGrid =
-    !showBallGrid && inWordPlay && ballPlateauSession.introSequenceComplete;
+  const plateauTeam =
+    openingPlateauTeamIndex >= 0 ? openingPlateauTeamIndex : activeTeamIndex();
+  const activePlateau = plateauSession(plateauTeam);
+  const openingPlateau = openingPlateauTeamIndex >= 0 && inWordPlay;
+  /** Grille chiffres : tirage après victoire, ou présentation plateau (toutes les équipes au démarrage). */
+  const showBallGrid = inDrawPhase || openingPlateau;
+  const showLetterGrid = inWordPlay && !showBallGrid;
 
   if (ballDrawEl) {
     ballDrawEl.classList.toggle('hidden', !showBallGrid);
     const gridHost = $('#ball-motus-grid');
-    if (showBallGrid && gridHost && !gridHost.querySelector('.ball-flip-wrap')) {
-      buildWinBallGridDom(gridHost);
-      syncBallGridHitsToDom();
+    if (showBallGrid) {
+      mountPlateauGridForTeam(plateauTeam);
     }
     const slots = ballDrawEl.querySelector('.win-ball-slots');
     const cont = $('#btn-win-continue');
@@ -1346,6 +1948,7 @@ function render(game) {
     if (cont) {
       cont.disabled = inDrawPhase && winBallDrawInFlight;
       cont.setAttribute('aria-busy', cont.disabled ? 'true' : 'false');
+      cont.textContent = hasMoreWordsInSession() ? 'Mot suivant' : 'Terminer la partie';
     }
   }
 
@@ -1371,21 +1974,41 @@ function render(game) {
     gameActions.classList.toggle('hidden', hideLetterUi);
     gameActions.hidden = hideLetterUi;
   }
+  const gameTopMeta = document.querySelector('.game-top-meta');
+  if (gameTopMeta) {
+    gameTopMeta.classList.toggle('hidden', hideLetterUi);
+    gameTopMeta.hidden = hideLetterUi;
+  }
   if (attemptsLabel) {
     attemptsLabel.classList.toggle('hidden', hideLetterUi);
     attemptsLabel.hidden = hideLetterUi;
   }
+  if (turnTimerEl) {
+    const showTimer = !hideLetterUi && game.turnTimerEnabled;
+    turnTimerEl.classList.toggle('hidden', !showTimer);
+    turnTimerEl.hidden = !showTimer;
+  }
+  updateMotusScoreDom();
 
-  messageEl.textContent =
-    game.winBallPhase && game.finished ? '' : game.message || '';
+  if (ballDrawTitleEl && showBallGrid) {
+    ballDrawTitleEl.textContent = ballDrawTitleForTeam(plateauTeam);
+  }
+  if (messageEl) {
+    const statusText =
+      game.winBallPhase && game.finished && !game.message ? '' : game.message || '';
+    messageEl.textContent = showBallGrid ? '' : showLetterGrid ? statusText : '';
+  }
 
   if (!showLetterGrid) {
     gridEl.innerHTML = '';
+    stopTurnTimer();
     return;
   }
 
   focusWordPlaySurface();
   attemptsLabel.textContent = `Essai ${Math.min(game.currentRow + 1, game.maxAttempts)} / ${game.maxAttempts}`;
+  updateWordProgressDom();
+  updateMotusScoreDom();
 
   if (game.verifyAnimating && patchVerifyRevealRow(game)) {
     return;
@@ -1414,10 +2037,10 @@ function render(game) {
           cell.setAttribute('aria-current', 'true');
         }
       }
-      const showDot = ri <= game.currentRow && !letter && state === 'empty';
+      applyBonusBlinkClass(cell, game, ri, ci);
       const span = document.createElement('span');
       span.className = 'cell-char';
-      span.textContent = letter || (showDot ? '·' : '');
+      span.textContent = cellCharDisplay(game, ri, ci, letter, state);
       cell.appendChild(span);
       gridEl.appendChild(cell);
     }
@@ -1428,14 +2051,13 @@ function render(game) {
   renderKeyboard(game, inputReady);
   const sub = $('#btn-submit');
   const del = $('#btn-delete');
-  const nb = $('#btn-new');
   if (sub) sub.disabled = !letterActive || game.inputLocked;
   if (del) del.disabled = !inputReady || game.inputLocked;
-  if (nb) nb.disabled = !!(game.winBallPhase && game.finished);
   if (overlayDebug && !overlayDebug.classList.contains('hidden')) {
     refreshDebugPanel();
   }
   requestAnimationFrame(syncMobileKeyboardLayout);
+  syncTurnTimer(game);
 }
 
 function renderKeyboard(game, letterUiReady = true) {
@@ -1480,17 +2102,6 @@ function bindControls() {
     goToPlayMenu();
   });
 
-  $('#btn-new').addEventListener('click', () => {
-    resetSessionMotusScore();
-    resetBallPlateauSession({ full: false });
-    lastCastAnnouncedTarget = '';
-    void motus?.start(selectedLength).then(() => {
-      if (motus?.target) {
-        primeCastLetterAudio(motus.target);
-        scheduleCastLetterOnGesture();
-      }
-    });
-  });
   $('#btn-submit').addEventListener('click', () => {
     if (!motus || !isLetterGridActive(motus)) return;
     unlockAudioSync();
@@ -1508,8 +2119,18 @@ function bindControls() {
     { passive: true },
   );
   $('#btn-modal-close').addEventListener('click', () => {
+    const action = modal.dataset.action || 'next-word';
     modal.classList.add('hidden');
-    void startGame();
+    resetModalCloseButtonLabel();
+    if (action === 'session-end') {
+      goToPlayMenu();
+      return;
+    }
+    if (!hasMoreWordsInSession()) {
+      showSessionCompleteModal();
+      return;
+    }
+    void continueSessionNextWord();
   });
 
   window.addEventListener(

@@ -93,6 +93,57 @@ export async function playPublicSoundFile(filename) {
 }
 
 /**
+ * Lecture d’un MP3 public jusqu’à la fin (ou timeout de sécurité).
+ * @param {string} filename ex. `Timeout.mp3`
+ */
+async function playPublicSoundFileUntilEnd(filename, maxWaitMs = 22000) {
+  if (!filename) return false;
+  unlockAudioSync();
+  const srcUrl = soundHref(filename);
+  if (!srcUrl) return false;
+  const el = document.createElement('audio');
+  el.setAttribute('playsinline', '');
+  el.setAttribute('webkit-playsinline', '');
+  el.preload = 'auto';
+  el.style.display = 'none';
+  el.setAttribute('data-motus-plateau', `public-wait-${filename}`);
+  document.body.appendChild(el);
+  el.src = srcUrl;
+  try {
+    el.load();
+  } catch {
+    detachPlateauAudioEl(el);
+    return false;
+  }
+  const ready = await waitPlateauCanPlay(el, 5000);
+  if (!ready || el.error) {
+    detachPlateauAudioEl(el);
+    return false;
+  }
+  const cap = Math.min(
+    maxWaitMs,
+    Number.isFinite(el.duration) && el.duration > 0 ? Math.ceil(el.duration * 1000) + 1200 : maxWaitMs,
+  );
+  const reasonPromise = waitAudioEndReason(el, cap);
+  try {
+    el.muted = false;
+    el.currentTime = 0;
+    const p = el.play();
+    if (p !== undefined) await p.catch(() => {});
+  } catch {
+    detachPlateauAudioEl(el);
+    return false;
+  }
+  if (el.error || el.paused) {
+    detachPlateauAudioEl(el);
+    return false;
+  }
+  const reason = await reasonPromise;
+  detachPlateauAudioEl(el);
+  return reason === 'ended' || reason === 'timeout';
+}
+
+/**
  * Essaie plusieurs noms de base (sans extension), premier fichier trouvé gagne.
  * @param {string[]} basenames ex. `['m', '283']`
  */
@@ -101,6 +152,26 @@ export async function playPublicSoundBasenames(basenames) {
     if (await playPublicSoundFile(`${base}.mp3`)) return true;
   }
   return false;
+}
+
+/** Son lettre bonus révélée (`public/sounds/Lettre-Bonus.mp3`). */
+export async function playLetterBonusSound() {
+  if (!GAME_SFX.letterBonus) return false;
+  unlockAudioSync();
+  return playPublicSoundFile(`${GAME_SFX.letterBonus}.mp3`);
+}
+
+/** Mot non trouvé en fin de partie (`public/sounds/mot-not-nound.mp3`). */
+export async function playWordNotFoundSound() {
+  if (!GAME_SFX.wordNotFound) return false;
+  unlockAudioSync();
+  return playPublicSoundFile(`${GAME_SFX.wordNotFound}.mp3`);
+}
+
+/** Chrono de tour écoulé (`public/sounds/Timeout.mp3`) — attend la fin avant la suite. */
+export async function playTimeoutSound() {
+  if (!GAME_SFX.timeout) return false;
+  return playPublicSoundFileUntilEnd(`${GAME_SFX.timeout}.mp3`);
 }
 
 /**
