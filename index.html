@@ -126,6 +126,54 @@
         <button type="button" class="nav-tab" data-nav="debug" id="nav-debug">Debug</button>
       </nav>
 
+      <section
+        id="pwa-install-hint"
+        class="panel pwa-install-hint"
+        aria-labelledby="pwa-install-title"
+      >
+        <h2 id="pwa-install-title" class="pwa-install-hint__title">Installer Motus sur votre téléphone</h2>
+        <p class="pwa-install-hint__lead">Accès direct depuis votre écran d’accueil.</p>
+        <div class="pwa-install-hint__grid">
+          <article class="pwa-install-hint__card">
+            <h3 class="pwa-install-hint__platform">iPhone / iPad</h3>
+            <ol class="pwa-install-hint__steps">
+              <li>Ouvrir le site dans <strong>Safari</strong></li>
+              <li>
+                Appuyer sur
+                <span class="pwa-install-hint__ios-share" aria-hidden="true">
+                  <svg viewBox="0 0 24 24" width="20" height="20" focusable="false">
+                    <path
+                      fill="none"
+                      stroke="currentColor"
+                      stroke-width="1.75"
+                      stroke-linecap="round"
+                      stroke-linejoin="round"
+                      d="M12 3v8.5M8.5 7 12 3.5 15.5 7M6 11.5h-.5A2.5 2.5 0 0 0 3 14v4.5A2.5 2.5 0 0 0 5.5 21h13a2.5 2.5 0 0 0 2.5-2.5V14a2.5 2.5 0 0 0-2.5-2.5H18"
+                    />
+                  </svg>
+                </span>
+                <strong>Partager</strong>
+              </li>
+              <li>Choisir <strong>Sur l’écran d’accueil</strong></li>
+            </ol>
+          </article>
+          <article class="pwa-install-hint__card">
+            <h3 class="pwa-install-hint__platform">Android</h3>
+            <ol class="pwa-install-hint__steps">
+              <li>Ouvrir le site dans <strong>Chrome</strong></li>
+              <li>Menu <strong>⋮</strong> (trois points)</li>
+              <li><strong>Installer l’application</strong> ou <strong>Ajouter à l’écran d’accueil</strong></li>
+            </ol>
+          </article>
+        </div>
+        <div class="pwa-install-hint__actions">
+          <button type="button" class="btn btn-primary" id="pwa-install-hint-go">Nouvelle partie</button>
+          <button type="button" class="link-btn pwa-install-hint__dismiss" id="pwa-install-hint-dismiss">
+            Ne plus afficher
+          </button>
+        </div>
+      </section>
+
       <section id="menu" class="panel menu-setup hidden" aria-labelledby="menu-setup-title">
         <header class="menu-setup-header">
           <h2 id="menu-setup-title" class="menu-setup-title">Nouvelle partie</h2>

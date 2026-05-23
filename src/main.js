@@ -88,6 +88,8 @@ const overlaySettings = $('#overlay-settings');
 const overlayCredits = $('#overlay-credits');
 const overlayDebug = $('#overlay-debug');
 const navOverlays = [overlayAide, overlaySettings, overlayCredits, overlayDebug];
+const pwaInstallHint = $('#pwa-install-hint');
+const PWA_HINT_DISMISS_KEY = 'motus-pwa-hint-dismissed';
 
 let selectedLength = 6;
 /** @type {'solo' | 'team'} */
@@ -655,10 +657,38 @@ function menuSetupWizardPrev() {
   syncMenuSetupWizard();
 }
 
+function isPwaStandalone() {
+  return (
+    document.documentElement.classList.contains('pwa-standalone') ||
+    window.matchMedia('(display-mode: standalone)').matches ||
+    window.navigator.standalone === true
+  );
+}
+
+function isPwaInstallHintDismissed() {
+  try {
+    return localStorage.getItem(PWA_HINT_DISMISS_KEY) === '1';
+  } catch {
+    return false;
+  }
+}
+
+function syncPwaInstallHintVisibility() {
+  if (!pwaInstallHint) return;
+  const overlayOpen = navOverlays.some((el) => el && !el.classList.contains('hidden'));
+  const inGame = gamePanel && !gamePanel.classList.contains('hidden');
+  const menuVisible = menu && !menu.classList.contains('hidden');
+  const show =
+    !isPwaStandalone() && !isPwaInstallHintDismissed() && !inGame && !overlayOpen && !menuVisible;
+  pwaInstallHint.classList.toggle('hidden', !show);
+  pwaInstallHint.hidden = !show;
+}
+
 function syncPlayMenuVisibility() {
   if (!menu) return;
   const showMenu = playMenuRevealed && gamePanel.classList.contains('hidden');
   menu.classList.toggle('hidden', !showMenu);
+  syncPwaInstallHintVisibility();
 }
 
 function closeAllOverlays() {
@@ -1206,6 +1236,17 @@ function initMenu() {
 
   $('#nav-play').addEventListener('click', () => {
     goToPlayMenu();
+  });
+  $('#pwa-install-hint-go')?.addEventListener('click', () => {
+    goToPlayMenu();
+  });
+  $('#pwa-install-hint-dismiss')?.addEventListener('click', () => {
+    try {
+      localStorage.setItem(PWA_HINT_DISMISS_KEY, '1');
+    } catch {
+      /* ignore */
+    }
+    syncPwaInstallHintVisibility();
   });
   $('#menu-setup-prev')?.addEventListener('click', menuSetupWizardPrev);
   $('#menu-setup-next')?.addEventListener('click', menuSetupWizardNext);
@@ -2530,6 +2571,7 @@ function initStandalonePwa() {
     window.matchMedia('(display-mode: standalone)').matches ||
     window.navigator.standalone === true;
   if (standalone) document.documentElement.classList.add('pwa-standalone');
+  syncPwaInstallHintVisibility();
 }
 
 loadAudioSettings();
