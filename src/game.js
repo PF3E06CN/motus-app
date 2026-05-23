@@ -51,6 +51,8 @@ export class MotusGame {
     this.nextTypeCol = 0;
     this.placement = [];
     this.absentLetters = new Set();
+    /** Lettres déjà révélées mal placées (jaune) — affichées en jaune sur le clavier. */
+    this.wrongPlaceLetters = new Set();
     this.finished = false;
     this.loading = false;
     this.inputLocked = false;
@@ -127,6 +129,7 @@ export class MotusGame {
     if (idx < 0) return;
 
     this.placement[idx] = 'correct';
+    this.wrongPlaceLetters.delete(this.target[idx]);
     const row = this.getActiveRow();
     if (row) {
       row.letters[idx] = this.target[idx];
@@ -188,6 +191,7 @@ export class MotusGame {
     this.placement = Array(this.length).fill(null);
     this.placement[0] = 'correct';
     this.absentLetters = new Set();
+    this.wrongPlaceLetters = new Set();
     this.finished = false;
     this.inputLocked = false;
     this.winBallPhase = false;
@@ -550,12 +554,18 @@ export class MotusGame {
       await warmVerifyAudio();
 
       const applyLetterResult = (i) => {
+        const ch = guess[i];
         row.states[i] = results[i];
         if (results[i] === 'correct') {
           this.placement[i] = 'correct';
+          this.wrongPlaceLetters.delete(ch);
+        }
+        if (results[i] === 'wrong') {
+          this.wrongPlaceLetters.add(ch);
         }
         if (results[i] === 'missing') {
-          this.absentLetters.add(guess[i]);
+          this.absentLetters.add(ch);
+          this.wrongPlaceLetters.delete(ch);
         }
         this.emit();
       };
