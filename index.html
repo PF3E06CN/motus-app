@@ -93,22 +93,35 @@
 
       <section id="game" class="panel hidden">
         <div class="game-top">
-          <button type="button" class="btn btn-ghost" id="btn-menu" aria-label="Menu">☰</button>
-          <div
-            id="motus-score-group"
-            class="motus-score"
-            role="group"
-            aria-label="Score plateau : 0 points"
-          >
-            <span class="motus-score-label">Pts</span>
-            <div class="motus-score-cells">
-              <span class="motus-score-cell" id="motus-score-d0">0</span>
-              <span class="motus-score-cell" id="motus-score-d1">0</span>
-              <span class="motus-score-cell" id="motus-score-d2">0</span>
+          <div class="game-top-left">
+            <button type="button" class="btn btn-ghost" id="btn-menu" aria-label="Menu">☰</button>
+            <div
+              id="motus-score-group"
+              class="motus-score"
+              role="group"
+              aria-label="Score plateau : 0 points"
+            >
+              <span class="motus-score-label">Pts</span>
+              <div class="motus-score-cells">
+                <span class="motus-score-cell" id="motus-score-d0">0</span>
+                <span class="motus-score-cell" id="motus-score-d1">0</span>
+                <span class="motus-score-cell" id="motus-score-d2">0</span>
+              </div>
             </div>
           </div>
+          <div class="game-top-logo" aria-hidden="true">
+            <img
+              class="logo-img logo-img--compact"
+              src="Images/motus-logo.png"
+              width="445"
+              height="100"
+              alt=""
+            />
+          </div>
           <span class="attempts-label" id="attempts-label"></span>
-          <button type="button" class="btn btn-ghost" id="btn-new" title="Nouveau mot">↻</button>
+          <div class="game-top-right">
+            <button type="button" class="btn btn-ghost" id="btn-new" title="Nouveau mot">↻</button>
+          </div>
         </div>
 
         <div id="ball-draw" class="ball-draw win-ball-draw hidden" aria-live="polite">
@@ -133,11 +146,29 @@
 
         <div id="message" class="message" role="status"></div>
 
-        <div id="keyboard" class="keyboard" aria-label="Clavier AZERTY"></div>
-
-        <div class="game-actions">
-          <button type="button" class="btn btn-secondary" id="btn-submit">Valider</button>
-          <button type="button" class="btn btn-secondary" id="btn-delete">Effacer</button>
+        <div class="keyboard-zone">
+          <div id="keyboard" class="keyboard" aria-label="Clavier AZERTY">
+            <div class="game-actions">
+              <button
+                type="button"
+                class="btn btn-secondary kb-action kb-action--delete"
+                id="btn-delete"
+                aria-label="Effacer"
+              >
+                <span class="kb-action-text">Effacer</span>
+                <span class="kb-action-icon" aria-hidden="true">⌫</span>
+              </button>
+              <button
+                type="button"
+                class="btn btn-secondary kb-action kb-action--return"
+                id="btn-submit"
+                aria-label="Valider"
+              >
+                <span class="kb-action-text">Valider</span>
+                <span class="kb-action-icon" aria-hidden="true">↵</span>
+              </button>
+            </div>
+          </div>
         </div>
       </section>
 

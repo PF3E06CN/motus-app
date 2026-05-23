@@ -4,7 +4,7 @@ import {
   primeCastDrawNumber,
   primeCastLetterAudio,
 } from './cast-sounds.js';
-import { MotusGame, AZERTY_ROWS } from './game.js';
+import { MotusGame, AZERTY_ROWS, AZERTY_KEY_COLUMNS } from './game.js';
 import {
   isIOSDevice,
   isSafariBrowser,
@@ -33,8 +33,8 @@ window.__MOTUS__ = null;
 
 /** Logo PNG transparent (`Images/motus-logo.png`). */
 function initLogo() {
-  const logo = document.querySelector('.logo-img');
-  if (!logo) return;
+  const logos = document.querySelectorAll('.logo-img');
+  if (!logos.length) return;
   const candidates = ['Images/motus-logo.png', 'public/Images/motus-logo.png'];
   let i = 0;
   const tryNext = () => {
@@ -42,7 +42,9 @@ function initLogo() {
     const url = new URL(candidates[i], document.baseURI).href;
     const probe = new Image();
     probe.onload = () => {
-      logo.src = url;
+      logos.forEach((logo) => {
+        logo.src = url;
+      });
     };
     probe.onerror = () => {
       i += 1;
@@ -1223,9 +1225,39 @@ function showEndModal(payload) {
   modalWord.textContent = `Le mot était : ${payload.word}`;
 }
 
+const mobileKeyboardMq = () =>
+  window.matchMedia('(max-width: 520px), (hover: none) and (pointer: coarse)');
+
+/** Force le recalcul layout de la zone clavier (iPhone, après rendu / rotation). */
+function syncMobileKeyboardLayout() {
+  const zone = document.querySelector('.keyboard-zone');
+  if (!zone || !document.body.classList.contains('game-in-play') || !mobileKeyboardMq().matches) {
+    return;
+  }
+  if (zone.classList.contains('hidden') || zone.hidden) return;
+  if (zone.clientHeight < 48) {
+    requestAnimationFrame(syncMobileKeyboardLayout);
+  }
+}
+
 function syncBodyPlayMode() {
   const inGame = !!(gamePanel && !gamePanel.classList.contains('hidden'));
   document.body.classList.toggle('game-in-play', inGame);
+  const compactLogo = document.querySelector('.game-top-logo');
+  if (compactLogo) compactLogo.setAttribute('aria-hidden', inGame ? 'false' : 'true');
+  requestAnimationFrame(() => {
+    requestAnimationFrame(syncMobileKeyboardLayout);
+  });
+}
+
+let keyboardLayoutObserver;
+function ensureKeyboardLayoutObserver() {
+  const zone = document.querySelector('.keyboard-zone');
+  if (!zone || keyboardLayoutObserver) return;
+  keyboardLayoutObserver = new ResizeObserver(() => syncMobileKeyboardLayout());
+  keyboardLayoutObserver.observe(zone);
+  window.addEventListener('resize', syncMobileKeyboardLayout, { passive: true });
+  window.visualViewport?.addEventListener('resize', syncMobileKeyboardLayout, { passive: true });
 }
 
 function syncGameLayoutVars(game) {
@@ -1325,6 +1357,11 @@ function render(game) {
   gridEl?.classList.remove('grid--ball-pending');
   gamePanel.classList.toggle('game--win-ball', inDrawPhase);
   gamePanel.classList.toggle('game--plateau-intro', showBallGrid);
+  const keyboardZone = document.querySelector('.keyboard-zone');
+  if (keyboardZone) {
+    keyboardZone.classList.toggle('hidden', hideLetterUi);
+    keyboardZone.hidden = hideLetterUi;
+  }
   if (keyboardEl) {
     keyboardEl.classList.toggle('hidden', hideLetterUi);
     keyboardEl.hidden = hideLetterUi;
@@ -1398,18 +1435,26 @@ function render(game) {
   if (overlayDebug && !overlayDebug.classList.contains('hidden')) {
     refreshDebugPanel();
   }
+  requestAnimationFrame(syncMobileKeyboardLayout);
 }
 
 function renderKeyboard(game, letterUiReady = true) {
-  keyboardEl.innerHTML = '';
-  AZERTY_ROWS.forEach((row) => {
+  const actionsEl = keyboardEl.querySelector('.game-actions');
+  keyboardEl.querySelectorAll('.kb-row').forEach((row) => row.remove());
+  AZERTY_ROWS.forEach((row, rowIndex) => {
     const rowEl = document.createElement('div');
     rowEl.className = 'kb-row';
-    for (const ch of row) {
+    const cols = AZERTY_KEY_COLUMNS[rowIndex];
+    for (let i = 0; i < row.length; i++) {
+      const ch = row[i];
       const key = document.createElement('button');
       key.type = 'button';
       key.className = 'key';
       key.setAttribute('lang', 'fr');
+      if (cols?.[i] != null) {
+        key.style.gridColumn = String(cols[i]);
+        key.style.gridRow = String(rowIndex + 1);
+      }
       key.textContent = ch;
       if (game.absentLetters.has(ch)) key.classList.add('absent');
       const canType = letterUiReady;
@@ -1425,7 +1470,8 @@ function renderKeyboard(game, letterUiReady = true) {
       }
       rowEl.appendChild(key);
     }
-    keyboardEl.appendChild(rowEl);
+    if (actionsEl) keyboardEl.insertBefore(rowEl, actionsEl);
+    else keyboardEl.appendChild(rowEl);
   });
 }
 
@@ -1552,3 +1598,4 @@ if (gamePanel && !gamePanel.hasAttribute('tabindex')) {
 bindControls();
 bindMenuGeneriqueListener();
 scheduleInitialMenuGenerique();
+ensureKeyboardLayoutObserver();

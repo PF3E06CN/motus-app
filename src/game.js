@@ -17,6 +17,13 @@ const AZERTY_ROWS = [
   'WXCVBN',
 ];
 
+/** Colonnes (grille 10 alignée) — ligne 3 : W–N puis ⌫ (sous L) ↵ (sous M). */
+const AZERTY_KEY_COLUMNS = [
+  [1, 2, 3, 4, 5, 6, 7, 8, 9, 10],
+  [1, 2, 3, 4, 5, 6, 7, 8, 9, 10],
+  [1, 2, 3, 4, 5, 6],
+];
+
 export class MotusGame {
   constructor({ onUpdate, onEnd }) {
     this.onUpdate = onUpdate;
@@ -378,4 +385,4 @@ export class MotusGame {
   }
 }
 
-export { AZERTY_ROWS };
+export { AZERTY_ROWS, AZERTY_KEY_COLUMNS };
