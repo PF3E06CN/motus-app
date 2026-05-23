@@ -187,8 +187,32 @@ export async function playTimeoutSound() {
 
 /** Roulement de tambour pendant le brassage de la boule (`public/sounds/motus_roll.mp3`). */
 export async function playPlateauBallRollSound() {
+  return playPlateauBallRollSoundBody();
+}
+
+async function playPlateauBallRollSoundBody() {
   if (!GAME_SFX.plateauBallRoll) return false;
-  return playPublicSoundFileUntilEnd(`${GAME_SFX.plateauBallRoll}.mp3`, 30000);
+  if (!isSfxEnabled()) return false;
+  const { cacheKey, bases, domId } = PLATEAU_KEYS.ballRoll;
+  try {
+    unlockAudioSync();
+    pauseBackgroundMediaForVerify();
+    const ctx = getCtx();
+    if (ctx) {
+      await ensureRunning(ctx);
+      let buf = roleBuffers.get(cacheKey);
+      if (!isUsableDecodedBuffer(buf)) buf = await loadFirstPlateauBuffer(ctx, cacheKey, bases);
+      if (isUsableDecodedBuffer(buf)) {
+        await playBufferOnce(ctx, buf);
+        return true;
+      }
+    }
+    if (domId && (await playPlateauDomToEnd(domId, { maxWaitMs: 30000 }))) return true;
+    if (domId && (await playPlateauEphemeralDomToEnd(domId, { maxWaitMs: 30000 }))) return true;
+    return playPublicSoundFileUntilEnd(`${GAME_SFX.plateauBallRoll}.mp3`, 30000);
+  } catch {
+    return false;
+  }
 }
 
 /**
@@ -1419,6 +1443,12 @@ const PLATEAU_KEYS = {
     clipSec: null,
     domId: 'motus-snd-plateau-black',
   },
+  ballRoll: {
+    cacheKey: 'plateau-ball-roll',
+    bases: sfxBases(GAME_SFX.plateauBallRoll),
+    clipSec: null,
+    domId: 'motus-snd-plateau-roll',
+  },
 };
 
 /** Marge après la fin de lecture forcée du clip (ms). */
@@ -1451,6 +1481,7 @@ export function wirePlateauAudioElementsFromSfx() {
     ['motus-snd-plateau-flip', GAME_SFX.plateauDrawFlip],
     ['motus-snd-plateau-motus', GAME_SFX.plateauMotusLine],
     ['motus-snd-plateau-black', GAME_SFX.plateauBlackBall],
+    ['motus-snd-plateau-roll', GAME_SFX.plateauBallRoll],
   ];
   for (const [id, base] of pairs) {
     const el = document.getElementById(id);
@@ -1517,9 +1548,19 @@ async function playPlateauDomToEnd(domId, opts = {}) {
   const el = document.getElementById(domId);
   if (!el || !(el instanceof HTMLAudioElement) || el.error) return false;
   try {
+    el.pause();
     el.muted = false;
     el.currentTime = 0;
     el.volume = sfxElementVolume();
+    if (isIOSDevice() || isSafariBrowser()) {
+      try {
+        el.load();
+      } catch {
+        /* ignore */
+      }
+      const ready = await waitPlateauCanPlay(el, 4000);
+      if (!ready || el.error) return false;
+    }
   } catch {
     return false;
   }
@@ -2002,8 +2043,12 @@ export async function primeGridBallSounds() {
     await loadFirstPlateauBuffer(ctx, PLATEAU_KEYS.drawFlip.cacheKey, PLATEAU_KEYS.drawFlip.bases);
     await loadFirstPlateauBuffer(ctx, PLATEAU_KEYS.blackBall.cacheKey, PLATEAU_KEYS.blackBall.bases);
     await loadFirstPlateauBuffer(ctx, PLATEAU_KEYS.motusLine.cacheKey, PLATEAU_KEYS.motusLine.bases);
-    if (GAME_SFX.plateauBallRoll) {
-      await fetch(soundHref(`${GAME_SFX.plateauBallRoll}.mp3`)).catch(() => {});
+    if (PLATEAU_KEYS.ballRoll.bases.length) {
+      await loadFirstPlateauBuffer(
+        ctx,
+        PLATEAU_KEYS.ballRoll.cacheKey,
+        PLATEAU_KEYS.ballRoll.bases,
+      );
     }
   } catch {
     /* ignore */

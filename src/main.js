@@ -2524,10 +2524,19 @@ function bindMenuGeneriqueListener() {
   }
 }
 
+/** iOS « Ajouter à l’écran d’accueil » : classe pour styles standalone (encoche, safe-area). */
+function initStandalonePwa() {
+  const standalone =
+    window.matchMedia('(display-mode: standalone)').matches ||
+    window.navigator.standalone === true;
+  if (standalone) document.documentElement.classList.add('pwa-standalone');
+}
+
 loadAudioSettings();
 syncAudioSettingsToDom();
 applyMusicSetting();
 
+initStandalonePwa();
 initMenu();
 syncPlayMenuVisibility();
 if (gamePanel && !gamePanel.hasAttribute('tabindex')) {

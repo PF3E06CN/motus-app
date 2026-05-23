@@ -47,6 +47,33 @@ html {
   font-size: 16px;
   -webkit-text-size-adjust: 100%;
   touch-action: manipulation;
+  overscroll-behavior: none;
+}
+
+/* PWA « Ajouter à l’écran d’accueil » (iOS / Android) */
+html.pwa-standalone body {
+  overscroll-behavior: none;
+}
+
+html.pwa-standalone #app {
+  padding-top: max(1.25rem, env(safe-area-inset-top, 0px));
+  padding-right: max(1rem, env(safe-area-inset-right, 0px));
+  padding-bottom: max(2rem, env(safe-area-inset-bottom, 0px));
+  padding-left: max(1rem, env(safe-area-inset-left, 0px));
+}
+
+@media (display-mode: standalone) {
+  html,
+  body {
+    overscroll-behavior: none;
+  }
+
+  #app {
+    padding-top: max(1.25rem, env(safe-area-inset-top, 0px));
+    padding-right: max(1rem, env(safe-area-inset-right, 0px));
+    padding-bottom: max(2rem, env(safe-area-inset-bottom, 0px));
+    padding-left: max(1rem, env(safe-area-inset-left, 0px));
+  }
 }
 
 body {

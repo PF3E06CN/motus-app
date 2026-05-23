@@ -1,0 +1,26 @@
+{
+  "name": "Motus — Jeu des mots",
+  "short_name": "Motus",
+  "description": "Jeu de mots inspiré de l'émission Motus",
+  "lang": "fr",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "theme_color": "#c82400",
+  "background_color": "#c82400",
+  "icons": [
+    {
+      "src": "favicon.png",
+      "sizes": "900x900",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "favicon.png",
+      "sizes": "900x900",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ]
+}
