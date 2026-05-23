@@ -279,12 +279,14 @@ export function isIOSDevice() {
 const VERIFY_SAMPLE_ROLES = new Set(['correct', 'wrong', 'missing']);
 
 /** @type {Map<string, [HTMLAudioElement, HTMLAudioElement]>} */
-const iosVerifySlotsByRole = new Map();
+const safariVerifySlotsByRole = new Map();
 /** @type {Record<string, number>} */
-const iosVerifySlotFlip = { correct: 0, wrong: 0, missing: 0 };
-let iosVerifyWarmed = false;
+const safariVerifySlotFlip = { correct: 0, wrong: 0, missing: 0 };
+let safariVerifyWarmed = false;
+/** @type {AudioBufferSourceNode | null} */
+let activeSafariVerifySource = null;
 
-function configureIOSVerifyElement(el) {
+function configureSafariVerifyElement(el) {
   el.setAttribute('playsinline', '');
   el.setAttribute('webkit-playsinline', '');
   el.playsInline = true;
@@ -292,33 +294,43 @@ function configureIOSVerifyElement(el) {
   el.volume = 1;
 }
 
-/** Deux pistes dédiées par rôle (pas les &lt;audio&gt; du HTML : évite une lecture parasite au clic « Jouer » sur iOS). */
-function ensureIOSVerifySlots(role) {
-  const cached = iosVerifySlotsByRole.get(role);
+/** Deux pistes préchargées par rôle — Safari (iOS + macOS), sans recréer un &lt;audio&gt; par lettre. */
+function ensureSafariVerifySlots(role) {
+  const cached = safariVerifySlotsByRole.get(role);
   if (cached) return cached;
 
   const pair = /** @type {[HTMLAudioElement, HTMLAudioElement]} */ ([
-    createIOSVerifyAudioElement(role, 0),
-    createIOSVerifyAudioElement(role, 1),
+    createSafariVerifyAudioElement(role, 0),
+    createSafariVerifyAudioElement(role, 1),
   ]);
-  iosVerifySlotsByRole.set(role, pair);
+  safariVerifySlotsByRole.set(role, pair);
   return pair;
 }
 
-function createIOSVerifyAudioElement(role, index) {
+function createSafariVerifyAudioElement(role, index) {
   const el = document.createElement('audio');
-  configureIOSVerifyElement(el);
+  configureSafariVerifyElement(el);
   el.style.display = 'none';
-  el.setAttribute('data-motus-ios-verify-slot', `${role}-${index}`);
+  el.setAttribute('data-motus-safari-verify-slot', `${role}-${index}`);
   document.body.appendChild(el);
   return el;
 }
 
-function borrowIOSVerifyElement(role) {
-  const pair = ensureIOSVerifySlots(role);
-  const idx = iosVerifySlotFlip[role] % 2;
-  iosVerifySlotFlip[role] = idx + 1;
+function borrowSafariVerifyElement(role) {
+  const pair = ensureSafariVerifySlots(role);
+  const idx = safariVerifySlotFlip[role] % 2;
+  safariVerifySlotFlip[role] = idx + 1;
   return pair[idx];
+}
+
+function stopActiveSafariVerifyWebSource() {
+  if (!activeSafariVerifySource) return;
+  try {
+    activeSafariVerifySource.stop();
+  } catch {
+    /* ignore */
+  }
+  activeSafariVerifySource = null;
 }
 
 function hrefForVerifyRole(role) {
@@ -579,17 +591,11 @@ export async function primeAudioContext() {
 }
 
 /**
- * Précharge iOS (load uniquement, jamais play) — à appeler après un geste utilisateur.
- */
-/**
- * Précharge les sons de validation (Safari : load / decode uniquement, sans play).
+ * Précharge les sons de validation sur Safari (pistes HTML en pool + buffers Web Audio de secours).
  */
 export async function warmVerifyAudio() {
-  if (isIOSDevice()) {
-    await warmIOSVerifyAudio();
-    return;
-  }
-  if (!isSafariBrowser()) return;
+  if (!isSafariBrowser() || safariVerifyWarmed) return;
+  safariVerifyWarmed = true;
   unlockAudioSync();
   const ctx = getCtx();
   if (ctx) {
@@ -599,36 +605,11 @@ export async function warmVerifyAudio() {
     }
   }
   for (const role of VERIFY_SAMPLE_ROLES) {
-    const id = ROLE_TO_HTML_ID[role];
-    const el = id ? document.getElementById(id) : null;
-    if (!(el instanceof HTMLAudioElement)) continue;
     const href = hrefForVerifyRole(role);
     if (!href) continue;
-    el.muted = true;
-    const prev = el.getAttribute('data-motus-verify-href');
-    if (prev !== href) {
-      el.setAttribute('data-motus-verify-href', href);
-      el.src = href;
-      try {
-        el.load();
-      } catch {
-        /* ignore */
-      }
-    }
-    await waitMediaCanPlayThrough(el, 10000).catch(() => false);
-    el.muted = true;
-  }
-}
-
-export async function warmIOSVerifyAudio() {
-  if (!isIOSDevice() || iosVerifyWarmed) return;
-  iosVerifyWarmed = true;
-  for (const role of VERIFY_SAMPLE_ROLES) {
-    const href = hrefForVerifyRole(role);
-    if (!href) continue;
-    const pair = ensureIOSVerifySlots(role);
+    const pair = ensureSafariVerifySlots(role);
     for (const el of pair) {
-      configureIOSVerifyElement(el);
+      configureSafariVerifyElement(el);
       const prev = el.getAttribute('data-motus-verify-href');
       if (prev !== href) {
         el.setAttribute('data-motus-verify-href', href);
@@ -641,8 +622,14 @@ export async function warmIOSVerifyAudio() {
       }
       el.muted = true;
       await waitMediaCanPlayThrough(el, 10000).catch(() => false);
+      el.muted = true;
     }
   }
+}
+
+/** @deprecated Alias — utiliser {@link warmVerifyAudio}. */
+export async function warmIOSVerifyAudio() {
+  return warmVerifyAudio();
 }
 
 /**
@@ -729,11 +716,13 @@ async function loadBufferForRole(ctx, role) {
 async function playBufferOnce(ctx, buf) {
   await ensureRunning(ctx);
   if (!isUsableDecodedBuffer(buf)) return;
+  stopActiveSafariVerifyWebSource();
   await new Promise((resolve) => {
     let settled = false;
     const finish = () => {
       if (settled) return;
       settled = true;
+      if (activeSafariVerifySource === src) activeSafariVerifySource = null;
       resolve();
     };
     const src = ctx.createBufferSource();
@@ -743,6 +732,7 @@ async function playBufferOnce(ctx, buf) {
     src.connect(gain);
     gain.connect(ctx.destination);
     const t0 = ctx.currentTime + 0.008;
+    activeSafariVerifySource = src;
     src.onended = finish;
     try {
       src.start(t0);
@@ -750,7 +740,7 @@ async function playBufferOnce(ctx, buf) {
       finish();
       return;
     }
-    window.setTimeout(finish, Math.ceil(buf.duration * 1000) + 280);
+    window.setTimeout(finish, Math.ceil(buf.duration * 1000) + 400);
   });
 }
 
@@ -800,7 +790,7 @@ async function playEphemeralAudioToEnd(href) {
   }
   const reason = await reasonPromise;
   detachPlateauAudioEl(el);
-  return reason === 'ended' || reason === 'timeout';
+  return reason === 'ended';
 }
 
 async function playVerifySampleFromBases(bases) {
@@ -818,9 +808,28 @@ async function playVerifySampleFromBases(bases) {
  * @param {string} href
  * @returns {Promise<boolean>}
  */
-async function playIOSVerifyOnElement(el, href) {
+async function playSafariVerifyOnElement(el, href) {
   if (!el || !href) return false;
-  configureIOSVerifyElement(el);
+  configureSafariVerifyElement(el);
+  stopActiveSafariVerifyWebSource();
+
+  const slotKey = el.getAttribute('data-motus-safari-verify-slot');
+  const roleKey = slotKey?.replace(/-\d+$/, '');
+  if (roleKey) {
+    const pair = safariVerifySlotsByRole.get(roleKey);
+    if (pair) {
+      for (const other of pair) {
+        if (other === el) continue;
+        try {
+          other.pause();
+          other.currentTime = 0;
+          other.muted = true;
+        } catch {
+          /* ignore */
+        }
+      }
+    }
+  }
 
   try {
     el.pause();
@@ -874,24 +883,14 @@ async function playIOSVerifyOnElement(el, href) {
   return reason === 'ended';
 }
 
-async function playIOSVerifyRole(role) {
-  if (!isIOSDevice()) return false;
-  await warmIOSVerifyAudio();
+async function playSafariVerifyRole(role) {
+  if (!isSafariBrowser()) return false;
+  await warmVerifyAudio();
   const href = hrefForVerifyRole(role);
   if (!href) return false;
-  const el = borrowIOSVerifyElement(role);
-  if (await playIOSVerifyOnElement(el, href)) return true;
-  const bases = ROLE_TO_BASES[role];
-  if (!bases?.length) return false;
-  for (const base of bases) {
-    for (const ext of EXT_PRIORITY) {
-      const alt = soundHref(base + ext);
-      if (alt !== href && (await playIOSVerifyOnElement(borrowIOSVerifyElement(role), alt))) {
-        return true;
-      }
-    }
-  }
-  return false;
+  const el = borrowSafariVerifyElement(role);
+  if (await playSafariVerifyOnElement(el, href)) return true;
+  return playRoleSampleWebAudio(role);
 }
 
 async function playRoleSampleWebAudio(role) {
@@ -918,21 +917,13 @@ export function clearDecodedSoundCache() {
  */
 async function playRoleSample(role) {
   const isVerify = VERIFY_SAMPLE_ROLES.has(role);
-  const iosVerify = isIOSDevice() && isVerify;
-  const desktopSafariVerify = isSafariBrowser() && !isIOSDevice() && isVerify;
-  if (!iosVerify && !desktopSafariVerify) unlockAudioSync();
+  const safariVerify = isSafariBrowser() && isVerify;
+  if (!safariVerify) unlockAudioSync();
 
-  if (iosVerify) {
-    if (await playIOSVerifyRole(role)) return true;
+  if (safariVerify) {
+    if (await playSafariVerifyRole(role)) return true;
     const bases = ROLE_TO_BASES[role];
     if (await playVerifySampleFromBases(bases)) return true;
-    return false;
-  }
-
-  if (desktopSafariVerify) {
-    const bases = ROLE_TO_BASES[role];
-    if (await playVerifySampleFromBases(bases)) return true;
-    if (await playRoleSampleWebAudio(role)) return true;
     return false;
   }
 
@@ -985,7 +976,7 @@ const BLIP = 0.09;
  * Les « bien placés » ont un délai plus long : ils arrivent souvent plusieurs fois d’affilée.
  */
 function pauseAfterVerifyOutcome(_outcome) {
-  return isSafariBrowser() ? 85 : 25;
+  return isSafariBrowser() ? 35 : 25;
 }
 
 /**
