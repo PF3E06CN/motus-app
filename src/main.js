@@ -152,6 +152,25 @@ function isLetterGridActive(game) {
   return true;
 }
 
+/** Lettre bonus manuelle (solo) : prochaine lettre du mot encore inconnue. */
+function canUseSoloBonusLetter(game) {
+  if (!game || playMode !== 'solo' || game.teamMode) return false;
+  if (!isLetterGridActive(game)) return false;
+  if (game.inputLocked || game.verifyAnimating) return false;
+  if (game.bonusRevealCol >= 0 || game.bonusRevealBlinking) return false;
+  return game.findFirstBonusLetterIndex() >= 0;
+}
+
+function syncSoloBonusButton(game) {
+  const wrap = $('#solo-bonus-wrap');
+  const btn = $('#btn-solo-bonus');
+  if (!wrap || !btn) return;
+  const show = playMode === 'solo' && isLetterGridActive(game);
+  wrap.classList.toggle('hidden', !show);
+  wrap.hidden = !show;
+  btn.disabled = !canUseSoloBonusLetter(game);
+}
+
 /** Saisie clavier : grille visible (la correction bloque dans typeLetter, pas via touches grisées). */
 function isWordPlayInputReady(game) {
   return isLetterGridActive(game);
@@ -2315,6 +2334,7 @@ function render(game) {
   const del = $('#btn-delete');
   if (sub) sub.disabled = !letterActive || game.inputLocked;
   if (del) del.disabled = !inputReady || game.inputLocked;
+  syncSoloBonusButton(game);
   if (overlayDebug && !overlayDebug.classList.contains('hidden')) {
     refreshDebugPanel();
   }
@@ -2375,6 +2395,11 @@ function bindControls() {
     void motus.submit().then(() => focusWordPlaySurface());
   });
   $('#btn-delete').addEventListener('click', () => motus?.deleteLetter());
+  $('#btn-solo-bonus')?.addEventListener('click', () => {
+    if (!motus || !canUseSoloBonusLetter(motus)) return;
+    unlockAudioSync();
+    void motus.grantBonusLetterWithReveal().then(() => focusWordPlaySurface());
+  });
   gamePanel.addEventListener(
     'pointerdown',
     () => {

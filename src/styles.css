@@ -172,10 +172,12 @@ body {
 .game--plateau-intro #message,
 .game--plateau-intro #grid,
 .game--plateau-intro .keyboard-zone,
+.game--plateau-intro .solo-bonus-wrap,
 .game--plateau-intro #keyboard,
 .game--plateau-intro .game-actions,
 .game--win-ball #grid,
 .game--win-ball .keyboard-zone,
+.game--win-ball .solo-bonus-wrap,
 .game--win-ball #keyboard,
 .game--win-ball .game-actions {
   display: none !important;
@@ -812,6 +814,14 @@ body {
   align-items: center;
   gap: 0.35rem;
   flex-shrink: 0;
+}
+
+.game-top-score-row {
+  display: flex;
+  align-items: center;
+  gap: 0.3rem;
+  min-width: 0;
+  flex-shrink: 1;
 }
 
 .game-top-logo {
@@ -1556,6 +1566,42 @@ body {
   cursor: default;
 }
 
+.solo-bonus-wrap {
+  display: flex;
+  align-items: center;
+  flex-shrink: 0;
+}
+
+.btn-solo-bonus {
+  padding: 0.18rem 0.42rem;
+  min-height: 1.65rem;
+  font-family: var(--font-body);
+  font-size: 0.62rem;
+  font-weight: 800;
+  line-height: 1.1;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: #2a1400;
+  background: linear-gradient(180deg, #ffe082 0%, #ffb300 55%, #ff8f00 100%);
+  border: 1.5px solid rgba(255, 255, 255, 0.5);
+  border-radius: 6px;
+  box-shadow:
+    0 1px 0 rgba(0, 0, 0, 0.28),
+    inset 0 1px 0 rgba(255, 255, 255, 0.45);
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.btn-solo-bonus:disabled {
+  opacity: 0.42;
+  cursor: default;
+}
+
+.btn-solo-bonus:not(:disabled):active {
+  filter: brightness(0.96);
+  transform: scale(0.97);
+}
+
 .game-actions {
   display: flex;
   gap: 0.75rem;
@@ -2081,6 +2127,18 @@ body.game-in-play .message {
     align-items: center;
     gap: 0.18rem;
     min-width: 0;
+  }
+
+  body.game-in-play .game-top-score-row {
+    gap: 0.2rem;
+    min-width: 0;
+  }
+
+  body.game-in-play .btn-solo-bonus {
+    padding: 0.12rem 0.3rem;
+    min-height: 1.45rem;
+    font-size: 0.54rem;
+    border-radius: 5px;
   }
 
   body.game-in-play .game-top-logo {
