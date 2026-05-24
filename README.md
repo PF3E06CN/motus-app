@@ -47,6 +47,7 @@ npm run dev
 - **Chrono** optionnel par tour ; **quota de mots** (8, 10, 12, 15 ou illimité).
 - Mot trouvé : **+50 pts** (+100 au dernier mot) puis tirage plateau ; ligne Motus : **+100 pts** ; fin de partie = classement par points.
 - Dernier mot (équipe) : tirage seulement si une ligne Motus peut encore faire gagner la partie.
+- **Boule magique** (équipe uniquement, **1ʳᵉ grille**) : après la présentation (25 numéros + 8 retournés), un numéro est **désigné** avec une animation sur la grille ; scintillement jusqu’au tirage. Son `boule_magique.mp3` **uniquement au tirage**. La **première équipe** qui le sort est immunisée pour **sa prochaine boule noire**. Après un Motus, nouvelles grilles pour toutes les équipes, sans boule magique.
 
 ## Dictionnaires (`public/dictionary/`)
 
@@ -77,6 +78,7 @@ Configurés dans `GAME_SFX` (`src/sounds.js`) :
 | `plateauDrawFlip` | `Tirrage-Chiffre.mp3` | Numéro tiré : case qui se retourne (après la voix) |
 | `plateauMotusLine` | `Motus.mp3` | Ligne Motus complète |
 | `plateauBlackBall` | `BouleNoire.mp3` | Boule noire |
+| `plateauMagicBall` | `boule_magique.mp3` | Numéro magique tiré (équipe, 1ʳᵉ grille) |
 | `verifyCorrect` / `Wrong` / `Missing` | `verify-*.mp3` | Correction lettre (grille mots) |
 | `wordInvalid` | `word-invalid.mp3` | Mot refusé |
 | `wordWin` | `word-win.mp3` | Mot trouvé |

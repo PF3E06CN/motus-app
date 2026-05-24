@@ -30,6 +30,7 @@ import {
   playGridBallHideSound,
   playGridDrawNumberFlipSound,
   playGridBlackBallSound,
+  playGridMagicBallSound,
   playGridMotusLineSound,
   playPlateauBallRollSound,
   playHtmlAudioById,
@@ -800,6 +801,7 @@ function goToPlayMenu() {
   gridEl.classList.remove('grid--ball-pending');
   gamePanel.classList.remove('game--win-ball');
   resetBallPlateauSession();
+  resetPlateauMagicBallState();
   resetWinBallDrawSlots();
   resetSessionMotusScore();
   resetSessionWordStats();
@@ -1592,11 +1594,21 @@ function createPlateauSession() {
     hiddenCellIndices: null,
     introSequenceComplete: false,
     urnRemaining: null,
+    /** Animation « boule magique » après les 8 retournements (1ʳᵉ grille, équipe). */
+    magicDesignationShown: false,
   };
 }
 
 /** Un plateau de chiffres par équipe (solo = une seule entrée). */
 let plateauSessions = [createPlateauSession()];
+
+/** Boule magique : 1ʳᵉ grille, mode équipe uniquement (pas après un Motus). */
+let plateauMagicBallActive = false;
+/** @type {number | null} */
+let globalMagicBallNumber = null;
+let magicBallClaimed = false;
+/** @type {number | null} — équipe immunisée pour la prochaine boule noire qu’elle tire. */
+let magicBallImmunityTeamIndex = null;
 
 function activeTeamIndex() {
   return motus?.teamMode ? motus.currentTeamIndex : 0;
@@ -1611,6 +1623,98 @@ function plateauSession(teamIndex = activeTeamIndex()) {
 
 function initPlateauSessionsForGame(teamCount) {
   plateauSessions = Array.from({ length: teamCount }, () => createPlateauSession());
+}
+
+function resetPlateauMagicBallState() {
+  plateauMagicBallActive = false;
+  globalMagicBallNumber = null;
+  magicBallClaimed = false;
+  magicBallImmunityTeamIndex = null;
+}
+
+function isPlateauMagicBallActive() {
+  return (
+    plateauMagicBallActive &&
+    !!motus?.teamMode &&
+    motus.teamSize > 1 &&
+    globalMagicBallNumber != null
+  );
+}
+
+/** Un seul numéro magique, visible sur la 1ʳᵉ grille de chaque équipe. */
+function assignGlobalMagicBallNumber() {
+  if (!plateauMagicBallActive || globalMagicBallNumber != null) return;
+  const teamCount = getSessionTeamCount();
+  if (teamCount < 2) return;
+  /** @type {Set<number> | null} */
+  let pool = null;
+  for (let t = 0; t < teamCount; t++) {
+    ensureHidden8AndUrnNumbers(t);
+    const visible = plateauSession(t).urnNumbers;
+    if (!Array.isArray(visible) || !visible.length) return;
+    const set = new Set(visible);
+    if (!pool) pool = set;
+    else pool = new Set([...pool].filter((n) => set.has(n)));
+  }
+  const candidates = pool?.size ? [...pool] : [...(plateauSession(0).urnNumbers ?? [])];
+  if (!candidates.length) return;
+  globalMagicBallNumber = candidates[Math.floor(Math.random() * candidates.length)];
+}
+
+function endPlateauMagicBallCycle() {
+  plateauMagicBallActive = false;
+  globalMagicBallNumber = null;
+  magicBallClaimed = false;
+  magicBallImmunityTeamIndex = null;
+}
+
+function clearMagicSparkleOnCell(wrap) {
+  if (!wrap) return;
+  wrap.classList.remove('ball-flip-wrap--magic');
+  delete wrap.dataset.magicSparkleUntilDraw;
+}
+
+function syncMagicBallMarkersOnGrid(teamIndex = activeTeamIndex()) {
+  const host = $('#ball-motus-grid');
+  if (!host) return;
+  const magic = globalMagicBallNumber;
+  const designated = plateauSession(teamIndex).magicDesignationShown;
+  const show =
+    isPlateauMagicBallActive() &&
+    magic != null &&
+    designated &&
+    !magicBallClaimed;
+  host.querySelectorAll('.ball-flip-wrap').forEach((wrap) => {
+    const n = Number(wrap.dataset.num);
+    const isMagicCell = n === magic;
+    const keepWhileDrawing = wrap.dataset.magicSparkleUntilDraw === '1';
+    wrap.classList.toggle(
+      'ball-flip-wrap--magic',
+      (show && isMagicCell) || (keepWhileDrawing && isMagicCell),
+    );
+    if (isMagicCell && show) {
+      wrap.setAttribute('title', 'Boule magique');
+      wrap.setAttribute('aria-label', `Numéro ${magic} — boule magique`);
+    } else if (!keepWhileDrawing) {
+      wrap.removeAttribute('title');
+      if (wrap.getAttribute('aria-label')?.includes('boule magique')) {
+        wrap.removeAttribute('aria-label');
+      }
+    }
+  });
+}
+
+/**
+ * Première équipe qui tire le numéro magique : immunité à sa prochaine boule noire.
+ * @returns {boolean}
+ */
+function tryClaimMagicBallOnDraw(teamIndex, value) {
+  if (!isPlateauMagicBallActive() || magicBallClaimed) return false;
+  const n = typeof value === 'number' ? value : Number(value);
+  if (!Number.isFinite(n) || n !== globalMagicBallNumber) return false;
+  magicBallClaimed = true;
+  magicBallImmunityTeamIndex = teamIndex;
+  return true;
 }
 
 /**
@@ -1631,6 +1735,7 @@ function resetBallPlateauSession(opts = {}) {
     session.urnNumbers = null;
     session.hiddenCellIndices = null;
     session.introSequenceComplete = false;
+    session.magicDesignationShown = false;
   }
   if (full && opts.teamIndex == null) {
     const host = $('#ball-motus-grid');
@@ -1663,6 +1768,7 @@ function mountPlateauGridForTeam(teamIndex) {
     }
   }
   syncBallGridHitsToDom(teamIndex);
+  syncMagicBallMarkersOnGrid(teamIndex);
 }
 
 /** Remet les deux emplacements de boules tirées à l’état initial (?). */
@@ -1683,9 +1789,28 @@ function resetWinBallDrawSlots() {
  * Après un Motus : nouvelle grille comme au début (nouveau masque de 8 cases, intro 25+8, urne pleine, aucun tir).
  * Le score plateau (`sessionMotusScore`) n’est pas modifié.
  */
+/**
+ * Après un Motus : nouvelle grille pour chaque équipe (plus de boule magique).
+ * L’équipe qui a marqué voit l’intro 25+8 ; les autres sont réinitialisées en arrière-plan.
+ */
+async function reinitializeAllPlateausAfterMotus(epochSnap = null, scoringTeamIndex = activeTeamIndex()) {
+  endPlateauMagicBallCycle();
+  const teamCount = getSessionTeamCount();
+  resetWinBallDrawSlots();
+  for (let t = 0; t < teamCount; t++) {
+    if (t === scoringTeamIndex) {
+      await reinitializePlateauAfterMotus(epochSnap, t);
+    } else {
+      resetBallPlateauSession({ full: true, teamIndex: t });
+      ensureHidden8AndUrnNumbers(t);
+      plateauSession(t).introSequenceComplete = false;
+    }
+    if (shouldAbortPlateauSession(epochSnap)) return;
+  }
+}
+
 async function reinitializePlateauAfterMotus(epochSnap = null, teamIndex = activeTeamIndex()) {
   resetBallPlateauSession({ full: true, teamIndex });
-  resetWinBallDrawSlots();
   ensureHidden8AndUrnNumbers(teamIndex);
   const gridHost = $('#ball-motus-grid');
   if (!gridHost) {
@@ -1703,6 +1828,39 @@ async function reinitializePlateauAfterMotus(epochSnap = null, teamIndex = activ
 
 /** Verrou partagé : intro grille (6/7) une seule fois, y compris si victoire arrive pendant l’anim. */
 let plateauIntroLock = false;
+/**
+ * Après les 8 retournements : tire le numéro magique (1ʳᵉ grille, équipe) et lance
+ * l’animation de désignation (sans son — le son ne joue qu’au tirage).
+ */
+async function designateMagicBallAfterIntro(epochSnap = null, teamIndex = activeTeamIndex()) {
+  if (!plateauMagicBallActive) return;
+  if (shouldAbortPlateauSession(epochSnap)) return;
+  if (globalMagicBallNumber == null) assignGlobalMagicBallNumber();
+  const magic = globalMagicBallNumber;
+  if (magic == null) return;
+
+  const session = plateauSession(teamIndex);
+  if (session.magicDesignationShown) {
+    syncMagicBallMarkersOnGrid(teamIndex);
+    return;
+  }
+
+  const wrap = document.querySelector(
+    `#ball-motus-grid .ball-flip-wrap[data-num="${magic}"]`,
+  );
+  session.magicDesignationShown = true;
+  if (!wrap) return;
+
+  const reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  wrap.classList.add('ball-flip-wrap--magic-reveal');
+  await sleep(reduced ? 450 : 1750);
+  if (shouldAbortPlateauSession(epochSnap)) return;
+  wrap.classList.remove('ball-flip-wrap--magic-reveal');
+  wrap.classList.add('ball-flip-wrap--magic');
+  syncMagicBallMarkersOnGrid(teamIndex);
+  await sleep(reduced ? 100 : 320);
+}
+
 async function runPlateauIntroSequence(epochSnap = null, teamIndex = activeTeamIndex()) {
   mountPlateauGridForTeam(teamIndex);
   await primeGridBallSounds();
@@ -1710,6 +1868,8 @@ async function runPlateauIntroSequence(epochSnap = null, teamIndex = activeTeamI
   await revealMotusGridCellsStaggered(epochSnap);
   if (shouldAbortPlateauSession(epochSnap)) return;
   await flipEightDesignatedCellsToHidden(epochSnap, teamIndex);
+  if (shouldAbortPlateauSession(epochSnap)) return;
+  await designateMagicBallAfterIntro(epochSnap, teamIndex);
   if (shouldAbortPlateauSession(epochSnap)) return;
   plateauSession(teamIndex).introSequenceComplete = true;
   syncBallGridHitsToDom(teamIndex);
@@ -1766,6 +1926,7 @@ function syncBallGridHitsToDom(teamIndex = activeTeamIndex()) {
     wrap.classList.add('ball-flip-wrap--hit');
     wrap.querySelector('.ball-flip-inner')?.classList.remove('ball-flip-inner--revealed');
   });
+  syncMagicBallMarkersOnGrid(teamIndex);
 }
 
 /** Monte la grille une seule fois par équipe ; évite de réinitialiser les retournements en cours. */
@@ -1948,13 +2109,20 @@ async function animateWinBall(slotIndex, value, epochSnap = null, teamIndex = ac
     if (shouldAbortPlateauSession(epochSnap)) return;
     mini.classList.remove('win-ball-mini--pop');
   } else {
+    const wrap = document.querySelector(`#ball-motus-grid .ball-flip-wrap[data-num="${value}"]`);
+    const isMagicDraw = tryClaimMagicBallOnDraw(teamIndex, value);
+    if (isMagicDraw && wrap) wrap.dataset.magicSparkleUntilDraw = '1';
+    if (isMagicDraw) {
+      unlockAudioSync();
+      await playGridMagicBallSound({ awaitCompletion: true }).catch(() => false);
+      if (shouldAbortPlateauSession(epochSnap)) return;
+    }
     unlockAudioSync();
     mini.classList.add('win-ball-mini--pop');
     await playCastDrawNumber(value).catch(() => {});
     if (shouldAbortPlateauSession(epochSnap)) return;
     mini.classList.remove('win-ball-mini--pop');
 
-    const wrap = document.querySelector(`#ball-motus-grid .ball-flip-wrap[data-num="${value}"]`);
     const inner = wrap?.querySelector('.ball-flip-inner');
     if (wrap && inner) {
       inner.classList.remove('ball-flip-inner--revealed');
@@ -1963,6 +2131,8 @@ async function animateWinBall(slotIndex, value, epochSnap = null, teamIndex = ac
       if (shouldAbortPlateauSession(epochSnap)) return;
       await waitFlipInnerTransition(inner);
       if (shouldAbortPlateauSession(epochSnap)) return;
+      clearMagicSparkleOnCell(wrap);
+      syncMagicBallMarkersOnGrid(teamIndex);
       wrap.classList.add('ball-flip-wrap--hit');
     }
     const n = typeof value === 'number' ? value : Number(value);
@@ -1971,9 +2141,21 @@ async function animateWinBall(slotIndex, value, epochSnap = null, teamIndex = ac
   await sleep(180);
 }
 
-/** Boule noire au tirage : l’équipe suivante prend la main (mode équipe). */
-function passHandToNextTeamAfterBlackBall() {
+/**
+ * Boule noire au tirage : l’équipe suivante prend la main (mode équipe),
+ * sauf si l’équipe qui tire avait l’immunité boule magique (une fois).
+ */
+function passHandToNextTeamAfterBlackBall(drawingTeamIndex = activeTeamIndex()) {
   if (!motus?.teamMode || motus.teamSize < 2) return;
+  if (
+    magicBallImmunityTeamIndex != null &&
+    magicBallImmunityTeamIndex === drawingTeamIndex
+  ) {
+    magicBallImmunityTeamIndex = null;
+    motus.message = 'Boule magique : vous gardez la main malgré la boule noire !';
+    motus.emit();
+    return;
+  }
   motus.advanceTeam();
   motus.emit();
 }
@@ -1998,7 +2180,7 @@ async function runWinBallMotus(epochSnap, teamIndex = activeTeamIndex()) {
   const draw0 = drawOneFromPlateauUrn(teamIndex);
   await animateWinBall(0, draw0, epochSnap, teamIndex);
   if (shouldAbortPlateauSession(epochSnap)) return;
-  if (draw0 === BALL_BLACK) passHandToNextTeamAfterBlackBall();
+  if (draw0 === BALL_BLACK) passHandToNextTeamAfterBlackBall(teamIndex);
   else motus?.emit();
 
   let draw1 = null;
@@ -2010,7 +2192,7 @@ async function runWinBallMotus(epochSnap, teamIndex = activeTeamIndex()) {
     draw1 = drawOneFromPlateauUrn(teamIndex);
     await animateWinBall(1, draw1, epochSnap, teamIndex);
     if (shouldAbortPlateauSession(epochSnap)) return;
-    if (draw1 === BALL_BLACK) passHandToNextTeamAfterBlackBall();
+    if (draw1 === BALL_BLACK) passHandToNextTeamAfterBlackBall(teamIndex);
     else motus?.emit();
   }
 
@@ -2027,7 +2209,7 @@ async function runWinBallMotus(epochSnap, teamIndex = activeTeamIndex()) {
       motusSoundPromise,
     ]);
     if (shouldAbortPlateauSession(epochSnap)) return;
-    await reinitializePlateauAfterMotus(epochSnap, teamIndex);
+    await reinitializeAllPlateausAfterMotus(epochSnap, teamIndex);
     if (shouldAbortPlateauSession(epochSnap)) return;
     motus?.emit();
     return;
@@ -2046,8 +2228,10 @@ async function startGame() {
   try {
     const teamCount = playMode === 'team' ? teamPlayerCount : 1;
     resetSessionMotusScore(teamCount);
+    resetPlateauMagicBallState();
     initPlateauSessionsForGame(teamCount);
     resetBallPlateauSession({ full: true });
+    if (playMode === 'team' && teamCount > 1) plateauMagicBallActive = true;
     const game = new MotusGame({
       onUpdate: render,
       onEnd: showEndModal,

@@ -1239,6 +1239,261 @@ body:not(.game-in-play) #pwa-install-hint:not(.hidden) {
   z-index: 2;
 }
 
+/* Boule magique : flash de désignation (après les 8 retournements) */
+.ball-flip-wrap--magic-reveal {
+  z-index: 5;
+  overflow: visible;
+  isolation: isolate;
+  animation: magic-ball-designate 1.65s cubic-bezier(0.34, 0.72, 0.22, 1) forwards;
+}
+
+.ball-flip-wrap--magic-reveal::before {
+  content: '';
+  position: absolute;
+  inset: -18%;
+  border-radius: 50%;
+  z-index: 14;
+  pointer-events: none;
+  background: radial-gradient(
+    circle at 50% 50%,
+    rgba(255, 255, 255, 0.98) 0%,
+    rgba(255, 220, 120, 0.75) 22%,
+    rgba(192, 132, 252, 0.55) 45%,
+    transparent 68%
+  );
+  animation: magic-ball-designate-flash 1.65s ease-out forwards;
+}
+
+.ball-flip-wrap--magic-reveal::after {
+  content: '✦';
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: clamp(1rem, 5vw, 1.45rem);
+  line-height: 1;
+  color: #fff;
+  text-shadow:
+    0 0 12px #fde047,
+    0 0 22px #c084fc,
+    0 0 32px rgba(255, 255, 255, 0.95);
+  z-index: 15;
+  pointer-events: none;
+  animation: magic-ball-designate-star 1.65s ease-out forwards;
+}
+
+@keyframes magic-ball-designate {
+  0% {
+    transform: scale(1);
+    filter: brightness(1);
+  }
+
+  35% {
+    transform: scale(1.14);
+    filter: brightness(1.45);
+  }
+
+  70% {
+    transform: scale(1.06);
+    filter: brightness(1.2);
+  }
+
+  100% {
+    transform: scale(1);
+    filter: brightness(1.08);
+  }
+}
+
+@keyframes magic-ball-designate-flash {
+  0% {
+    opacity: 0;
+    transform: scale(0.6);
+  }
+
+  25% {
+    opacity: 1;
+    transform: scale(1.15);
+  }
+
+  55% {
+    opacity: 0.85;
+    transform: scale(1.05);
+  }
+
+  100% {
+    opacity: 0;
+    transform: scale(1.2);
+  }
+}
+
+@keyframes magic-ball-designate-star {
+  0% {
+    opacity: 0;
+    transform: scale(0.4) rotate(-30deg);
+  }
+
+  30% {
+    opacity: 1;
+    transform: scale(1.35) rotate(8deg);
+  }
+
+  100% {
+    opacity: 0;
+    transform: scale(0.9) rotate(20deg);
+  }
+}
+
+/* Boule magique : scintillement continu jusqu’au tirage */
+.ball-flip-wrap--magic {
+  z-index: 4;
+  overflow: visible;
+  isolation: isolate;
+}
+
+.ball-flip-wrap--magic::before {
+  content: '';
+  position: absolute;
+  inset: -10%;
+  border-radius: 50%;
+  z-index: 12;
+  pointer-events: none;
+  background:
+    radial-gradient(circle at 28% 22%, rgba(255, 255, 255, 0.98) 0%, transparent 20%),
+    radial-gradient(circle at 72% 78%, rgba(196, 132, 252, 0.85) 0%, transparent 24%),
+    conic-gradient(
+      from 0deg at 50% 50%,
+      transparent 0deg,
+      rgba(255, 230, 140, 0.55) 36deg,
+      transparent 72deg,
+      rgba(167, 139, 250, 0.6) 128deg,
+      transparent 168deg,
+      rgba(255, 248, 200, 0.5) 224deg,
+      transparent 288deg
+    );
+  mix-blend-mode: screen;
+  opacity: 0.7;
+  animation:
+    magic-sparkle-spin 2.6s linear infinite,
+    magic-sparkle-pulse 1.35s ease-in-out infinite;
+}
+
+.ball-flip-wrap--magic::after {
+  content: '✦';
+  position: absolute;
+  top: 6%;
+  right: 10%;
+  font-size: clamp(0.45rem, 2.2vw, 0.62rem);
+  line-height: 1;
+  color: #fffef5;
+  text-shadow:
+    0 0 5px #fde047,
+    0 0 10px #c084fc,
+    0 0 16px rgba(255, 255, 255, 0.85);
+  z-index: 13;
+  pointer-events: none;
+  animation: magic-sparkle-twinkle 0.85s ease-in-out infinite alternate;
+}
+
+.ball-flip-wrap--magic .ball-flip-inner::after {
+  content: '';
+  position: absolute;
+  inset: 4%;
+  border-radius: 50%;
+  pointer-events: none;
+  z-index: 6;
+  box-shadow:
+    0 0 10px 2px rgba(255, 214, 120, 0.7),
+    0 0 20px 5px rgba(168, 85, 247, 0.45),
+    inset 0 0 12px rgba(255, 255, 255, 0.35);
+  animation: magic-sparkle-glow 1.15s ease-in-out infinite alternate;
+}
+
+.ball-flip-wrap--magic .ball-flip-face--hemi {
+  box-shadow:
+    inset 0 -6px 12px rgba(80, 40, 120, 0.3),
+    0 0 0 2px rgba(255, 220, 120, 0.85),
+    0 0 18px rgba(192, 132, 252, 0.55);
+}
+
+.ball-flip-wrap--magic .ball-flip-face--flat {
+  color: #1a0a2e;
+  text-shadow:
+    0 0 10px rgba(255, 220, 120, 0.95),
+    0 0 6px rgba(192, 132, 252, 0.75);
+}
+
+@keyframes magic-sparkle-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes magic-sparkle-pulse {
+  0%,
+  100% {
+    opacity: 0.5;
+    transform: scale(0.94);
+  }
+
+  50% {
+    opacity: 0.95;
+    transform: scale(1.06);
+  }
+}
+
+@keyframes magic-sparkle-twinkle {
+  0% {
+    opacity: 0.25;
+    transform: scale(0.75) rotate(-18deg);
+  }
+
+  100% {
+    opacity: 1;
+    transform: scale(1.2) rotate(18deg);
+  }
+}
+
+@keyframes magic-sparkle-glow {
+  0% {
+    opacity: 0.45;
+  }
+
+  100% {
+    opacity: 1;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ball-flip-wrap--magic-reveal {
+    animation: none;
+  }
+
+  .ball-flip-wrap--magic-reveal::before,
+  .ball-flip-wrap--magic-reveal::after {
+    animation: none;
+    opacity: 0.9;
+  }
+
+  .ball-flip-wrap--magic::before,
+  .ball-flip-wrap--magic::after,
+  .ball-flip-wrap--magic .ball-flip-inner::after {
+    animation: none;
+  }
+
+  .ball-flip-wrap--magic::before {
+    opacity: 0.8;
+  }
+
+  .ball-flip-wrap--magic::after {
+    opacity: 0.9;
+  }
+
+  .ball-flip-wrap--magic .ball-flip-inner::after {
+    opacity: 0.75;
+  }
+}
+
 /* Ligne Motus : face lettre (M O T U S) après retournement */
 .ball-flip-wrap--motus-letter {
   z-index: 3;
@@ -1701,6 +1956,8 @@ body:not(.game-in-play) #pwa-install-hint:not(.hidden) {
 
 .keyboard > .game-actions {
   display: flex;
+  justify-content: center;
+  align-items: center;
   gap: 0.75rem;
   width: 100%;
   margin-top: 0.1rem;
@@ -1827,6 +2084,8 @@ body:not(.game-in-play) #pwa-install-hint:not(.hidden) {
 
 .game-actions {
   display: flex;
+  justify-content: center;
+  align-items: center;
   gap: 0.75rem;
   margin-top: 0.25rem;
 }
@@ -2497,12 +2756,12 @@ body.game-in-play .message {
 
   body.game-in-play .kb-action--delete {
     grid-row: 3;
-    grid-column: 7 / span 2;
+    grid-column: 4 / span 2;
   }
 
   body.game-in-play .kb-action--return {
     grid-row: 3;
-    grid-column: 9 / span 2;
+    grid-column: 6 / span 2;
   }
 
   body.game-in-play .keyboard .kb-row {

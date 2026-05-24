@@ -37,6 +37,8 @@ export const GAME_SFX = {
   plateauDrawFlip: 'Tirrage-Chiffre',
   plateauMotusLine: 'Motus',
   plateauBlackBall: 'BouleNoire',
+  /** Numéro magique tiré (mode équipe, 1ʳᵉ grille). */
+  plateauMagicBall: 'boule_magique',
   /** Brassage de la boule avant tirage (roulement de tambour). */
   plateauBallRoll: 'motus_roll',
 };
@@ -1443,6 +1445,12 @@ const PLATEAU_KEYS = {
     clipSec: null,
     domId: 'motus-snd-plateau-black',
   },
+  magicBall: {
+    cacheKey: 'plateau-magic',
+    bases: sfxBases(GAME_SFX.plateauMagicBall),
+    clipSec: null,
+    domId: 'motus-snd-plateau-magic',
+  },
   ballRoll: {
     cacheKey: 'plateau-ball-roll',
     bases: sfxBases(GAME_SFX.plateauBallRoll),
@@ -1481,6 +1489,7 @@ export function wirePlateauAudioElementsFromSfx() {
     ['motus-snd-plateau-flip', GAME_SFX.plateauDrawFlip],
     ['motus-snd-plateau-motus', GAME_SFX.plateauMotusLine],
     ['motus-snd-plateau-black', GAME_SFX.plateauBlackBall],
+    ['motus-snd-plateau-magic', GAME_SFX.plateauMagicBall],
     ['motus-snd-plateau-roll', GAME_SFX.plateauBallRoll],
   ];
   for (const [id, base] of pairs) {
@@ -2042,6 +2051,13 @@ export async function primeGridBallSounds() {
     }
     await loadFirstPlateauBuffer(ctx, PLATEAU_KEYS.drawFlip.cacheKey, PLATEAU_KEYS.drawFlip.bases);
     await loadFirstPlateauBuffer(ctx, PLATEAU_KEYS.blackBall.cacheKey, PLATEAU_KEYS.blackBall.bases);
+    if (PLATEAU_KEYS.magicBall.bases.length) {
+      await loadFirstPlateauBuffer(
+        ctx,
+        PLATEAU_KEYS.magicBall.cacheKey,
+        PLATEAU_KEYS.magicBall.bases,
+      );
+    }
     await loadFirstPlateauBuffer(ctx, PLATEAU_KEYS.motusLine.cacheKey, PLATEAU_KEYS.motusLine.bases);
     if (PLATEAU_KEYS.ballRoll.bases.length) {
       await loadFirstPlateauBuffer(
@@ -2181,6 +2197,58 @@ async function playGridBallHideSoundBody(opts = {}) {
 /** Boule noire (hors file plateau : piste entière). */
 export function playGridBlackBallSound(opts = {}) {
   return playGridBlackBallSoundBody(opts);
+}
+
+/** Numéro magique tiré (mode équipe). */
+export function playGridMagicBallSound(opts = {}) {
+  return playGridMagicBallSoundBody(opts);
+}
+
+async function playGridMagicBallSoundBody(opts = {}) {
+  if (!isSfxEnabled()) {
+    if (opts.awaitCompletion) await delay(80);
+    return;
+  }
+  const { cacheKey, bases, clipSec, domId } = PLATEAU_KEYS.magicBall;
+  try {
+    unlockAudioSync();
+    const ctx = getCtx();
+    if (ctx) {
+      await ensureRunning(ctx);
+      if (!roleBuffers.get(cacheKey)) await loadFirstPlateauBuffer(ctx, cacheKey, bases);
+      const buf = roleBuffers.get(cacheKey);
+      if (isUsableDecodedBuffer(buf)) {
+        const cap = firePlateauClip(ctx, cacheKey, clipSec);
+        if (cap != null) {
+          if (opts.awaitCompletion) await delay(Math.ceil(cap * 1000) + PLATEAU_TAIL_SILENCE_MS);
+          return;
+        }
+      }
+    }
+
+    if (opts.awaitCompletion) {
+      if (domId && clipSec != null && Number.isFinite(clipSec) && tryStartPlateauDom(domId, clipSec)) {
+        await delay(plateauShortClipHoldMs(clipSec));
+        return;
+      }
+      if (domId && (clipSec == null || !Number.isFinite(clipSec)) && (await playPlateauDomToEnd(domId, { maxWaitMs: 15000 })))
+        return;
+      if (await playPlateauHtml(bases, clipSec, true)) return;
+      const ctx2 = getCtx();
+      if (ctx2) await ensureRunning(ctx2);
+      playSynthGridTick('up');
+      await delay(95);
+      return;
+    }
+
+    if (domId && (await firePlateauEphemeralFromDomAudioSrc(domId))) return;
+    if (await firePlateauEphemeralOverlapFromBases(bases)) return;
+    const ctx2 = getCtx();
+    if (ctx2) await ensureRunning(ctx2);
+    playSynthGridTick('up');
+  } catch {
+    /* ignore */
+  }
 }
 
 async function playGridBlackBallSoundBody(opts = {}) {
