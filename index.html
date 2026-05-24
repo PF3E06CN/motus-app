@@ -1,0 +1,716 @@
+<!DOCTYPE html>
+<html lang="fr">
+  <head>
+    <meta charset="UTF-8" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1.0, viewport-fit=cover"
+    />
+    <title>Motus — Jeu des mots</title>
+    <meta name="description" content="Jeu de mots inspiré de l'émission Motus" />
+    <meta name="theme-color" content="#c82400" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-title" content="Motus" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="format-detection" content="telephone=no" />
+    <link rel="manifest" href="./manifest.webmanifest" />
+    <link rel="icon" type="image/png" href="./favicon.png" />
+    <link rel="apple-touch-icon" href="./favicon.png" sizes="180x180" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,600;0,9..40,700;1,9..40,400&display=swap"
+      rel="stylesheet"
+    />
+    <script type="module" crossorigin src="/motus-app/assets/index-CqlvO0pb.js"></script>
+    <link rel="stylesheet" crossorigin href="/motus-app/assets/index-BXqbC0g-.css">
+  </head>
+  <body>
+    <!-- Sons : chemins relatifs au document (Vite sert `public/sounds/` → `./sounds/…`). -->
+    <div class="sr-only" aria-hidden="true">
+      <audio id="motus-snd-correct" preload="none" playsinline></audio>
+      <audio id="motus-snd-wrong" preload="none" playsinline></audio>
+      <audio id="motus-snd-missing" preload="none" playsinline></audio>
+      <audio id="motus-snd-invalid" preload="auto" playsinline src="./sounds/word-invalid.mp3"></audio>
+      <audio id="motus-snd-win" preload="auto" playsinline src="./sounds/word-win.mp3"></audio>
+      <audio
+        id="motus-snd-plateau-reveal"
+        preload="auto"
+        playsinline
+        src="./sounds/Retournement-Chiffre.mp3"
+      ></audio>
+      <audio
+        id="motus-snd-plateau-hide"
+        preload="auto"
+        playsinline
+        src="./sounds/Retournement-Chiffre.mp3"
+      ></audio>
+      <audio
+        id="motus-snd-plateau-flip"
+        preload="auto"
+        playsinline
+        src="./sounds/Tirrage-Chiffre.mp3"
+      ></audio>
+      <audio id="motus-snd-plateau-motus" preload="auto" playsinline src="./sounds/Motus.mp3"></audio>
+      <audio
+        id="motus-snd-plateau-black"
+        preload="auto"
+        playsinline
+        src="./sounds/BouleNoire.mp3"
+      ></audio>
+      <audio
+        id="motus-snd-plateau-magic"
+        preload="auto"
+        playsinline
+        src="./sounds/boule_magique.mp3"
+      ></audio>
+      <audio
+        id="motus-snd-plateau-roll"
+        preload="auto"
+        playsinline
+        src="./sounds/motus_roll.mp3"
+      ></audio>
+      <audio
+        id="motus-snd-generique"
+        preload="auto"
+        playsinline
+        loop
+        src="./sounds/generique.mp3"
+      ></audio>
+    </div>
+    <audio id="motus-snd-cast-voice" preload="auto" playsinline></audio>
+    <audio id="motus-snd-cast-t" preload="auto" playsinline src="./sounds/t.mp3"></audio>
+    <audio id="motus-snd-cast-23" preload="auto" playsinline src="./sounds/23.mp3"></audio>
+    <audio id="motus-snd-cast-51" preload="auto" playsinline src="./sounds/51.mp3"></audio>
+
+    <div id="generique-overlay" class="generique" hidden aria-live="polite" aria-label="Générique Motus">
+      <canvas id="generique-canvas" class="generique__canvas" aria-hidden="true"></canvas>
+      <div class="generique__html">
+        <div class="generique__motus" data-overlay="motus" aria-hidden="true">
+          <div class="generique__motus-word">
+            <span class="generique__motus-part" data-part="m">M</span>
+            <span class="generique__motus-ball" data-part="o" aria-hidden="true"></span>
+            <span class="generique__motus-part" data-part="t">T</span>
+            <span class="generique__motus-part generique__motus-part--u" data-part="u">u</span>
+            <span class="generique__motus-part" data-part="s">S</span>
+          </div>
+        </div>
+        <div class="generique__credit" data-credit="nicole">
+          <p class="generique__credit-line">Proposé par</p>
+          <p class="generique__credit-name">Nicole Covillers</p>
+        </div>
+        <div class="generique__credit" data-credit="beccaro">
+          <p class="generique__credit-line">Présenté par</p>
+          <p class="generique__credit-name">Thierry Beccaro</p>
+        </div>
+        <div class="generique__credit" data-credit="masson">
+          <p class="generique__credit-line">Réalisé par</p>
+          <p class="generique__credit-name">Dominique Masson</p>
+        </div>
+      </div>
+      <button type="button" id="generique-skip" class="generique__skip">Passer</button>
+    </div>
+
+    <div id="motus-page-bg" class="motus-page-bg" aria-hidden="true"></div>
+    <div id="app">
+      <header class="header">
+        <h1 class="logo">
+          <img
+            class="logo-img"
+            src="Images/motus-logo.png"
+            width="445"
+            height="100"
+            alt="Motus"
+          />
+        </h1>
+      </header>
+
+      <nav class="app-nav" aria-label="Navigation principale">
+        <button type="button" class="nav-tab active" data-nav="play" id="nav-play">Jouer</button>
+        <button type="button" class="nav-tab" data-nav="aide" id="nav-aide">Règles</button>
+        <button type="button" class="nav-tab" data-nav="settings" id="nav-settings">Audio</button>
+        <button type="button" class="nav-tab" data-nav="credits" id="nav-credits">Crédits</button>
+        <button type="button" class="nav-tab hidden" data-nav="debug" id="nav-debug" hidden>Debug</button>
+      </nav>
+
+      <section
+        id="pwa-install-hint"
+        class="panel pwa-install-hint"
+        aria-labelledby="pwa-install-kicker"
+      >
+        <p id="pwa-install-kicker" class="pwa-install-hint__kicker">
+          Astuce&nbsp;: installer Motus sur votre téléphone
+        </p>
+        <div class="pwa-install-hint__homescreen" aria-hidden="true">
+          <div class="pwa-install-hint__app-icon">
+            <img src="./favicon.png" width="60" height="60" alt="" />
+          </div>
+          <span class="pwa-install-hint__app-name">Motus</span>
+        </div>
+        <p class="pwa-install-hint__lead">Comme une application sur votre écran d’accueil.</p>
+        <div class="pwa-install-hint__grid">
+          <article class="pwa-install-hint__card">
+            <h3 class="pwa-install-hint__platform">iPhone / iPad</h3>
+            <ol class="pwa-install-hint__steps">
+              <li>Ouvrir le site dans <strong>Safari</strong></li>
+              <li>
+                Appuyer sur
+                <span class="pwa-install-hint__ios-share" aria-hidden="true">
+                  <svg viewBox="0 0 24 24" width="20" height="20" focusable="false">
+                    <path
+                      fill="none"
+                      stroke="currentColor"
+                      stroke-width="1.75"
+                      stroke-linecap="round"
+                      stroke-linejoin="round"
+                      d="M12 3v8.5M8.5 7 12 3.5 15.5 7M6 11.5h-.5A2.5 2.5 0 0 0 3 14v4.5A2.5 2.5 0 0 0 5.5 21h13a2.5 2.5 0 0 0 2.5-2.5V14a2.5 2.5 0 0 0-2.5-2.5H18"
+                    />
+                  </svg>
+                </span>
+                <strong>Partager</strong>
+              </li>
+              <li>Choisir <strong>Sur l’écran d’accueil</strong></li>
+            </ol>
+          </article>
+          <article class="pwa-install-hint__card">
+            <h3 class="pwa-install-hint__platform">Android</h3>
+            <ol class="pwa-install-hint__steps">
+              <li>Ouvrir le site dans <strong>Chrome</strong></li>
+              <li>Menu <strong>⋮</strong> (trois points)</li>
+              <li><strong>Installer l’application</strong> ou <strong>Ajouter à l’écran d’accueil</strong></li>
+            </ol>
+          </article>
+        </div>
+        <div class="pwa-install-hint__actions">
+          <button type="button" class="link-btn pwa-install-hint__dismiss" id="pwa-install-hint-dismiss">
+            Ne plus afficher
+          </button>
+        </div>
+      </section>
+
+      <section id="menu" class="panel menu-setup hidden" aria-labelledby="menu-setup-title">
+        <header class="menu-setup-header">
+          <h2 id="menu-setup-title" class="menu-setup-title">Nouvelle partie</h2>
+          <p class="menu-setup-lead" id="menu-setup-lead">Étape 1 sur 4</p>
+          <div class="menu-setup-progress" role="progressbar" aria-valuemin="1" aria-valuemax="4" aria-valuenow="1">
+            <span class="menu-setup-progress__dot is-active" data-step-dot="1" aria-hidden="true"></span>
+            <span class="menu-setup-progress__dot" data-step-dot="2" aria-hidden="true"></span>
+            <span class="menu-setup-progress__dot" data-step-dot="3" aria-hidden="true"></span>
+            <span class="menu-setup-progress__dot" data-step-dot="4" aria-hidden="true"></span>
+          </div>
+        </header>
+
+        <div class="menu-setup-body">
+          <article class="menu-card menu-card--step" data-setup-step="1">
+            <h3 class="menu-card__title"><span class="menu-card__step" aria-hidden="true">1</span> Qui joue ?</h3>
+            <div class="mode-picker" id="mode-picker" role="radiogroup" aria-label="Mode de jeu">
+              <button type="button" class="mode-btn active" data-mode="solo" aria-pressed="true">
+                <span class="mode-btn__label">Solo</span>
+                <span class="mode-btn__hint">1 joueur</span>
+              </button>
+              <button type="button" class="mode-btn" data-mode="team" aria-pressed="false">
+                <span class="mode-btn__label">Équipe</span>
+                <span class="mode-btn__hint">2 à 4 équipes</span>
+              </button>
+            </div>
+
+            <div id="team-options" class="team-options menu-card__subsection hidden" aria-hidden="true">
+              <p class="menu-card__hint">Chaque équipe a son score et sa grille de chiffres. Relais à chaque essai.</p>
+              <p class="menu-card__label">Nombre d’équipes</p>
+              <div class="team-size-picker" id="team-size-picker" role="radiogroup" aria-label="Nombre d'équipes"></div>
+              <label class="menu-field" for="team-error-behavior">
+                <span class="menu-field-label">Après une erreur</span>
+                <select id="team-error-behavior" class="menu-select">
+                  <option value="add-bonus">Nouvelle ligne + lettre bonus (recommandé)</option>
+                  <option value="add">Nouvelle ligne</option>
+                  <option value="replace-bonus">Recommencer la ligne + bonus</option>
+                  <option value="replace">Recommencer la ligne</option>
+                </select>
+              </label>
+            </div>
+          </article>
+
+          <article class="menu-card menu-card--step menu-card--wizard-hidden" data-setup-step="2" hidden>
+            <h3 class="menu-card__title">
+              <span class="menu-card__step" aria-hidden="true">2</span> Taille du mot
+            </h3>
+            <p class="menu-card__hint">Vous avez autant d’essais que de lettres (ex. 6 lettres → 6 essais).</p>
+            <div class="length-picker" id="length-picker" role="radiogroup" aria-label="Nombre de lettres"></div>
+          </article>
+
+          <article class="menu-card menu-card--step menu-card--wizard-hidden" data-setup-step="3" hidden>
+            <h3 class="menu-card__title">
+              <span class="menu-card__step" aria-hidden="true">3</span> Combien de mots ?
+            </h3>
+            <label class="menu-field menu-field--compact" for="words-per-session">
+              <span class="menu-field-label">Choisissez le nombre de mots à trouver dans cette liste déroulante</span>
+              <select id="words-per-session" class="menu-select">
+                <option value="8" selected>8 mots — partie courte</option>
+                <option value="10">10 mots</option>
+                <option value="12">12 mots</option>
+                <option value="15">15 mots</option>
+                <option value="0">Sans limite</option>
+              </select>
+            </label>
+          </article>
+
+          <article class="menu-card menu-card--step menu-card--wizard-hidden" data-setup-step="4" hidden>
+            <h3 class="menu-card__title">
+              <span class="menu-card__step" aria-hidden="true">4</span> Avec ou sans chrono ?
+            </h3>
+            <label class="menu-field menu-field--checkbox" for="turn-timer-enabled">
+              <input type="checkbox" id="turn-timer-enabled" />
+              <span>Activer le chrono</span>
+            </label>
+            <label class="menu-field" for="turn-timer-seconds">
+              <span class="menu-field-label">Choisissez la durée du timer dans cette liste déroulante</span>
+              <select id="turn-timer-seconds" class="menu-select" disabled>
+                <option value="8" selected>8 secondes</option>
+                <option value="10">10 secondes</option>
+                <option value="15">15 secondes</option>
+                <option value="20">20 secondes</option>
+                <option value="30">30 secondes</option>
+              </select>
+            </label>
+          </article>
+        </div>
+
+        <footer class="menu-setup-footer">
+          <div class="menu-setup-nav">
+            <button type="button" class="btn btn-ghost menu-setup-prev hidden" id="menu-setup-prev">
+              Précédent
+            </button>
+            <button type="button" class="btn btn-primary" id="menu-setup-next">Suivant</button>
+            <button type="button" class="btn btn-primary btn-launch hidden" id="btn-play">Lancer la partie</button>
+          </div>
+          <p id="menu-loading-status" class="hint menu-loading-status hidden" role="status" aria-live="polite"></p>
+          <button type="button" class="link-btn menu-setup-rules menu-setup-rules--wizard-hidden hidden" id="menu-setup-rules">
+            Rappel des règles
+          </button>
+        </footer>
+      </section>
+
+      <section id="game" class="panel hidden">
+        <div class="game-top">
+          <div class="game-top-left">
+            <button type="button" class="btn btn-ghost" id="btn-menu" aria-label="Menu">☰</button>
+            <div class="game-top-score-row">
+              <div id="motus-scores" class="motus-scores">
+                <div
+                  id="motus-score-group"
+                  class="motus-score motus-score--solo"
+                  role="group"
+                  aria-label="Score plateau : 0 points"
+                >
+                  <span class="motus-score-label">Pts</span>
+                  <div class="motus-score-cells">
+                    <span class="motus-score-cell" id="motus-score-d0">0</span>
+                    <span class="motus-score-cell" id="motus-score-d1">0</span>
+                    <span class="motus-score-cell" id="motus-score-d2">0</span>
+                  </div>
+                </div>
+              </div>
+              <div id="solo-bonus-wrap" class="solo-bonus-wrap hidden">
+                <button
+                  type="button"
+                  class="btn btn-solo-bonus"
+                  id="btn-solo-bonus"
+                  aria-label="Révéler la prochaine lettre non trouvée du mot"
+                >
+                  Bonus
+                </button>
+              </div>
+            </div>
+          </div>
+          <div class="game-top-logo" aria-hidden="true">
+            <img
+              class="logo-img logo-img--compact"
+              src="Images/motus-logo.png"
+              width="445"
+              height="100"
+              alt=""
+            />
+          </div>
+          <div class="game-top-meta">
+            <span id="word-progress" class="word-progress hidden" aria-live="polite"></span>
+            <span class="attempts-label" id="attempts-label"></span>
+            <span id="turn-timer" class="turn-timer hidden" aria-live="polite" aria-label="Temps restant"></span>
+          </div>
+        </div>
+
+        <div id="ball-draw" class="ball-draw win-ball-draw hidden" aria-live="polite">
+          <p id="ball-draw-title" class="ball-draw-title">Grille Motus</p>
+          <div id="ball-motus-grid" class="ball-motus-grid" role="grid" aria-label="Grille 5 par 5 des numéros"></div>
+          <div class="win-ball-slots">
+            <div class="win-ball-slot" id="win-ball-slot-0">
+              <div class="win-ball-mini" id="win-ball-mini-0">
+                <span class="win-ball-char" id="win-ball-char-0">?</span>
+              </div>
+            </div>
+            <div class="win-ball-slot" id="win-ball-slot-1">
+              <div class="win-ball-mini" id="win-ball-mini-1">
+                <span class="win-ball-char" id="win-ball-char-1">?</span>
+              </div>
+            </div>
+          </div>
+          <button type="button" class="btn btn-primary" id="btn-win-continue">Continuer</button>
+        </div>
+
+        <div id="grid" class="grid" role="grid" aria-label="Grille Motus"></div>
+
+        <div id="message" class="message" role="status"></div>
+
+        <div class="keyboard-zone">
+          <div id="keyboard" class="keyboard" aria-label="Clavier AZERTY">
+            <div class="game-actions">
+              <button
+                type="button"
+                class="btn btn-secondary kb-action kb-action--delete"
+                id="btn-delete"
+                aria-label="Effacer"
+              >
+                <span class="kb-action-text">Effacer</span>
+                <span class="kb-action-icon" aria-hidden="true">⌫</span>
+              </button>
+              <button
+                type="button"
+                class="btn btn-secondary kb-action kb-action--return"
+                id="btn-submit"
+                aria-label="Valider"
+              >
+                <span class="kb-action-text">Valider</span>
+                <span class="kb-action-icon" aria-hidden="true">↵</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section id="modal" class="modal hidden" role="dialog" aria-modal="true">
+        <div class="modal-card">
+          <h2 id="modal-title"></h2>
+          <p id="modal-word" class="modal-word"></p>
+          <button type="button" class="btn btn-primary" id="btn-modal-close">Continuer</button>
+        </div>
+      </section>
+
+      <!-- Panneaux type motusJS (Règles / Paramètres / Crédits) -->
+      <section id="overlay-aide" class="app-overlay hidden" aria-hidden="true">
+        <div class="app-overlay-backdrop" data-close-overlay tabindex="-1"></div>
+        <div class="app-overlay-card app-overlay-card--rules" role="document">
+          <div class="app-overlay-top">
+            <button type="button" class="btn-overlay-back" data-close-overlay aria-label="Retour">🡰</button>
+            <h2 class="app-overlay-title">Règles</h2>
+          </div>
+          <div class="app-overlay-body rules-body">
+            <p class="rules-lead">
+              Trouvez le <strong>mot mystère</strong>. Vous disposez d’autant d’<strong>essais</strong> que de lettres
+              dans le mot. Une partie peut comporter plusieurs mots (réglage <strong>Nombre de mots à jouer</strong> sur
+              l’onglet Jouer).
+            </p>
+
+            <h3 class="app-overlay-h3">Grille de lettres</h3>
+            <ol class="rules-steps">
+              <li>La <strong>première lettre</strong> est imposée : complétez le mot lettre par lettre.</li>
+              <li>À chaque essai, le mot doit être <strong>complet</strong> (même longueur que la grille).</li>
+              <li>Validez avec <kbd>Entrée</kbd> ou le bouton <strong>Valider</strong>.</li>
+              <li>Les lettres déjà bien placées (rouges) restent sur les essais suivants ; vous pouvez les retaper.</li>
+            </ol>
+
+            <h3 class="app-overlay-h3">Signification des couleurs</h3>
+            <p class="rules-after-try">Après validation, chaque lettre de votre essai est colorée :</p>
+
+            <div class="rules-panel">
+              <ul class="rules-legend" aria-label="Légende des couleurs">
+                <li class="rules-legend-item">
+                  <span class="rules-cell rules-cell--correct" aria-hidden="true">A</span>
+                  <span><strong>Rouge</strong> — la lettre est au <strong>bon endroit</strong>.</span>
+                </li>
+                <li class="rules-legend-item">
+                  <span class="rules-cell rules-cell--wrong" aria-hidden="true">T</span>
+                  <span><strong>Jaune</strong> — la lettre est dans le mot, mais <strong>pas à cette place</strong>.</span>
+                </li>
+                <li class="rules-legend-item">
+                  <span class="rules-cell rules-cell--missing" aria-hidden="true">Z</span>
+                  <span><strong>Bleu</strong> — la lettre n’est <strong>pas dans le mot</strong>.</span>
+                </li>
+              </ul>
+
+              <div class="rules-example">
+                <p class="rules-example-label">Exemple après un essai</p>
+                <div class="rules-example-row" aria-hidden="true">
+                  <span class="rules-cell rules-cell--correct">M</span>
+                  <span class="rules-cell rules-cell--wrong">O</span>
+                  <span class="rules-cell rules-cell--missing">T</span>
+                  <span class="rules-cell rules-cell--missing">U</span>
+                  <span class="rules-cell rules-cell--correct">S</span>
+                </div>
+              </div>
+            </div>
+
+            <p class="rules-keyboard-hint">
+              Sur le clavier&nbsp;: <strong>rouge</strong> = bien placée&nbsp;;
+              <strong>jaune</strong> = dans le mot mais mal placée&nbsp;;
+              <strong>bleu foncé</strong> = absente du mot.
+            </p>
+
+            <h3 class="app-overlay-h3">Essai perdu</h3>
+            <p class="rules-note">
+              Un essai est refusé si le mot est <strong>incomplet</strong>, <strong>inconnu</strong>,
+              <strong>déjà proposé</strong>, ne commence pas par la première lettre imposée, ou n’est pas accepté par le
+              dictionnaire. En <strong>solo</strong>, l’essai est perdu. En <strong>équipe</strong>, le comportement
+              dépend du réglage choisi au menu (voir ci-dessous).
+            </p>
+
+            <h3 class="app-overlay-h3">Chrono (optionnel)</h3>
+            <p>
+              Si le chrono est activé, chaque équipe ou joueur dispose d’un temps limité par tour (8 à 30&nbsp;s). Le
+              compte à rebours démarre après l’annonce de la première lettre. Temps écoulé&nbsp;: essai perdu en solo ;
+              passage à l’équipe suivante en mode équipe (ligne réinitialisée, sans lettre bonus).
+            </p>
+
+            <h3 class="app-overlay-h3">Mode équipe</h3>
+            <p>De 2 à 4 équipes. Chaque équipe a son <strong>score</strong> et sa <strong>grille de chiffres</strong>. Les équipes se relaient à chaque essai validé (mot correct ou incorrect).</p>
+            <p class="rules-after-try">Après une erreur, au choix dans le menu&nbsp;:</p>
+            <ul class="rules-list">
+              <li><strong>Remplacer la ligne + lettre bonus</strong> — la même équipe recommence la ligne ; une lettre du mot (la première encore inconnue) est révélée.</li>
+              <li><strong>Remplacer la ligne</strong> — la même équipe efface et retape sa ligne.</li>
+              <li><strong>Ajouter une ligne + lettre bonus</strong> — l’équipe suivante joue une ligne de moins ; lettre bonus pour elle.</li>
+              <li><strong>Ajouter une ligne</strong> — l’équipe suivante joue sans bonus.</li>
+            </ul>
+            <p class="app-overlay-muted">
+              La lettre bonus apparaît en clignotant (son dédié) ; le chrono ne repart qu’après cette séquence.
+            </p>
+
+            <h3 class="app-overlay-h3">Mot trouvé — grille chiffres et points</h3>
+            <p>
+              Quand le mot est trouvé, l’équipe (ou le joueur) marque des points et effectue un <strong>tirage</strong>
+              sur sa grille 5×5 de numéros (jusqu’à deux boules, sauf boule noire ou ligne Motus déjà complète).
+            </p>
+            <ul class="rules-list">
+              <li><strong>+50 points</strong> — mot trouvé (sauf dernier mot de la partie).</li>
+              <li>
+                <strong>+100 points</strong> — pour l’équipe qui trouve le <strong>dernier mot de la partie</strong>
+                (en solo : le joueur).
+              </li>
+              <li><strong>+100 points</strong> — une ligne, colonne ou diagonale complète sur le plateau (alignement «&nbsp;Motus&nbsp;»).</li>
+              <li><strong>Boule noire</strong> — la main passe à l’équipe suivante (mode équipe).</li>
+            </ul>
+
+            <h3 class="app-overlay-h3">Dernier mot et fin de partie</h3>
+            <p>
+              Lorsque le quota de mots est atteint (8, 10, 12, 15 ou mode illimité sans fin automatique), les scores
+              totaux déterminent le <strong>gagnant</strong>.
+            </p>
+            <p>
+              Sur le <strong>dernier mot</strong>, en mode équipe&nbsp;: le tirage plateau n’a lieu que si l’équipe qui
+              vient de trouver le mot peut encore <strong>gagner la partie</strong> grâce à une ligne Motus (+100 pts),
+              et que cette ligne est possible avec les numéros restants. Sinon la partie se termine directement après les
+              +100 pts du mot.
+            </p>
+            <p class="app-overlay-muted">
+              Si personne ne trouve le mot, il est révélé lettre par lettre ; le son «&nbsp;mot non trouvé&nbsp;» se joue
+              à la fin de la révélation.
+            </p>
+          </div>
+        </div>
+      </section>
+
+      <section id="overlay-settings" class="app-overlay hidden" aria-hidden="true">
+        <div class="app-overlay-backdrop" data-close-overlay tabindex="-1"></div>
+        <div class="app-overlay-card" role="document">
+          <div class="app-overlay-top">
+            <button type="button" class="btn-overlay-back" data-close-overlay aria-label="Retour">🡰</button>
+            <h2 class="app-overlay-title">Réglages audio</h2>
+          </div>
+          <div class="app-overlay-body">
+            <div class="audio-settings-panel">
+              <label class="menu-field menu-field--checkbox" for="audio-mute-voices">
+                <input type="checkbox" id="audio-mute-voices" />
+                <span>Couper les voix (animateur, 1ʳᵉ lettre, numéros tirés)</span>
+              </label>
+              <label class="menu-field menu-field--checkbox" for="audio-mute-music">
+                <input type="checkbox" id="audio-mute-music" />
+                <span>Couper la musique du menu (générique)</span>
+              </label>
+              <label class="menu-field menu-field--checkbox" for="audio-mute-sfx">
+                <input type="checkbox" id="audio-mute-sfx" />
+                <span>Couper les effets sonores (plateau, validation, victoire…)</span>
+              </label>
+            </div>
+            <p class="app-overlay-muted">
+              Réglages mémorisés sur cet appareil. Les effets concernent la partie en cours ; la musique reprend au
+              menu.
+            </p>
+
+            <h3 class="app-overlay-h3">Partie</h3>
+            <p>
+              Les autres options (mode, chrono, nombre de mots, longueur…) se configurent sur l’onglet
+              <strong>Jouer</strong> (bouton orange).
+            </p>
+          </div>
+        </div>
+      </section>
+
+      <section id="overlay-credits" class="app-overlay hidden" aria-hidden="true">
+        <div class="app-overlay-backdrop" data-close-overlay tabindex="-1"></div>
+        <div class="app-overlay-card" role="document">
+          <div class="app-overlay-top">
+            <button type="button" class="btn-overlay-back" data-close-overlay aria-label="Retour">🡰</button>
+            <h2 class="app-overlay-title">Crédits</h2>
+          </div>
+          <div class="app-overlay-body">
+            <h3 class="app-overlay-h3">Motus</h3>
+            <p>
+              Le jeu <em>Motus</em> est une propriété de
+              <a href="https://www.francetelevisions.fr/" target="_blank" rel="noopener noreferrer"
+                >France Télévisions</a
+              >
+              / IDTV.
+            </p>
+            <h3 class="app-overlay-h3">Dictionnaires</h3>
+            <p>
+              Listes de mots incluses dans l’application (jeu hors ligne), d’après le dépôt
+              <a
+                href="https://github.com/difabiolorenzo/motusJS"
+                target="_blank"
+                rel="noopener noreferrer"
+                >motusJS</a
+              >
+              (difabiolorenzo).
+            </p>
+            <h3 class="app-overlay-h3">Interface</h3>
+            <p>
+              Barre de navigation et idée de volets inspirées de
+              <a
+                href="https://difabiolorenzo.github.io/motusJS/"
+                target="_blank"
+                rel="noopener noreferrer"
+                >motusJS en ligne</a
+              >.
+            </p>
+            <h3 class="app-overlay-h3">Intro de lancement</h3>
+            <p>
+              Séquence d’ouverture inspirée du <strong>générique télévisé Motus (2008–2014)</strong>. Cette intro est
+              proposée en <strong>bêta</strong> dans l’application.
+            </p>
+          </div>
+        </div>
+      </section>
+
+      <section id="overlay-debug" class="app-overlay hidden" aria-hidden="true">
+        <div class="app-overlay-backdrop" data-close-overlay tabindex="-1"></div>
+        <div class="app-overlay-card app-overlay-card--wide" role="document">
+          <div class="app-overlay-top">
+            <button type="button" class="btn-overlay-back" data-close-overlay aria-label="Retour">🡰</button>
+            <h2 class="app-overlay-title">Debug</h2>
+          </div>
+          <div class="app-overlay-body">
+            <p class="app-overlay-muted">
+              Outils de développement (comme sur
+              <a href="https://difabiolorenzo.github.io/motusJS/" target="_blank" rel="noopener noreferrer">motusJS</a
+              >). À n’utiliser qu’en local ou pour tester.
+            </p>
+
+            <h3 class="app-overlay-h3">Partie</h3>
+            <p id="debug-state-line" class="debug-readout">—</p>
+            <div class="debug-actions">
+              <button type="button" class="btn btn-secondary btn-debug" id="debug-refresh-state">Actualiser</button>
+              <button type="button" class="btn btn-secondary btn-debug" id="debug-new-word">Nouveau mot</button>
+            </div>
+
+            <h3 class="app-overlay-h3">Générique</h3>
+            <p class="debug-readout">Intro 3D Motus (29 s) — rejouer sans recharger la page.</p>
+            <div class="debug-actions">
+              <button type="button" class="btn btn-secondary btn-debug" id="debug-replay-generique">
+                Rejouer le générique
+              </button>
+            </div>
+
+            <h3 class="app-overlay-h3">Mot mystère (triche)</h3>
+            <p>
+              Visible uniquement pendant une partie en cours (hors chargement). En dev local, le mot est aussi envoyé
+              au fichier <code>reponse</code> via le serveur Vite / <code>dev_server.py</code>.
+            </p>
+            <p class="debug-target-row">
+              <code id="debug-target-word" class="debug-target">—</code>
+              <button type="button" class="btn btn-secondary btn-debug" id="debug-copy-target">Copier</button>
+            </p>
+
+            <h3 class="app-overlay-h3">Sons</h3>
+            <p class="debug-readout">Échantillon par fichier (<code>public/sounds/</code>) :</p>
+            <div class="debug-actions">
+              <button type="button" class="btn btn-secondary btn-debug" id="debug-snd-sample-correct">
+                Bien placé
+              </button>
+              <button type="button" class="btn btn-secondary btn-debug" id="debug-snd-sample-wrong">
+                Mal placé
+              </button>
+              <button type="button" class="btn btn-secondary btn-debug" id="debug-snd-sample-missing">
+                Absente
+              </button>
+              <button type="button" class="btn btn-secondary btn-debug" id="debug-snd-sample-invalid">
+                Mot invalide
+              </button>
+              <button type="button" class="btn btn-secondary btn-debug" id="debug-snd-sample-win">
+                Victoire
+              </button>
+            </div>
+            <p class="debug-readout">
+              Habillage grille (<code>Tirrage-Chiffre</code>, <code>Retournement-Chiffre</code>, <code>Motus</code>,
+              <code>BouleNoire</code> — pas les voix 1–70) :
+            </p>
+            <div class="debug-actions">
+              <button type="button" class="btn btn-secondary btn-debug" id="debug-snd-grid-prime">
+                Précharger effets plateau
+              </button>
+              <button type="button" class="btn btn-secondary btn-debug" id="debug-snd-grid-reveal">
+                Tirage chiffre (intro)
+              </button>
+              <button type="button" class="btn btn-secondary btn-debug" id="debug-snd-grid-hide">
+                Masquer 8 — Retournement-Chiffre
+              </button>
+              <button type="button" class="btn btn-secondary btn-debug" id="debug-snd-grid-flip">
+                Retournement chiffre
+              </button>
+              <button type="button" class="btn btn-secondary btn-debug" id="debug-snd-grid-motus">Motus</button>
+              <button type="button" class="btn btn-secondary btn-debug" id="debug-snd-grid-black">Boule noire</button>
+            </div>
+            <p class="debug-readout">Voix cast :</p>
+            <div class="debug-actions">
+              <button type="button" class="btn btn-secondary btn-debug" id="debug-snd-cast-letter">
+                Lettre « t »
+              </button>
+              <button type="button" class="btn btn-secondary btn-debug" id="debug-snd-cast-number">
+                Chiffre « 23 »
+              </button>
+              <button type="button" class="btn btn-secondary btn-debug" id="debug-snd-cast-3">
+                Chiffre « 3 »
+              </button>
+              <button type="button" class="btn btn-secondary btn-debug" id="debug-snd-cast-51">
+                Chiffre « 51 » (voix)
+              </button>
+            </div>
+            <p class="debug-readout">Utilitaires :</p>
+            <div class="debug-actions">
+              <button type="button" class="btn btn-secondary btn-debug" id="debug-snd-synth">
+                Bip test (Web Audio)
+              </button>
+              <button type="button" class="btn btn-secondary btn-debug" id="debug-snd-prime">Précharger audio</button>
+              <button type="button" class="btn btn-secondary btn-debug" id="debug-snd-buzz">Buzz erreur</button>
+              <button type="button" class="btn btn-secondary btn-debug" id="debug-snd-verify">Séquence test</button>
+              <button type="button" class="btn btn-secondary btn-debug" id="debug-snd-win">Fanfare</button>
+            </div>
+
+            <h3 class="app-overlay-h3">Console</h3>
+            <p>
+              Après avoir lancé une partie, l’instance courante est exposée sous
+              <code>window.__MOTUS__</code> (ex. <code>__MOTUS__.target</code>, <code>__MOTUS__.verifySet</code>).
+            </p>
+          </div>
+        </div>
+      </section>
+    </div>
+  </body>
+</html>
